@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>₿ Collateral Protocol – BTC Lending Sim</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    body { margin: 0; background: #0a0a14; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef } = React;
+
+    const INIT_BTC_PRICE = 65000;
+    const INIT_BTC = 2.0;
+    const INIT_LTV = 0.3;
+    const INIT_INTEREST = 9;
+    const INIT_LTV_STEP = 0.1;
+    const INIT_INT_STEP = 1;
+    const N_BORROWERS = 8;
+    let loanIdCounter = 1;
+
+    function genBorrower(id, ls, is) {
+      return { id, name: `Borrower ${id}`, btc: +(Math.random()*3+0.5).toFixed(4), cash: 0,
+        ltv: INIT_LTV, interest: INIT_INTEREST, ltvStep: ls, intStep: is,
+        hasLoan: false, loanAmt: 0, collateral: 0, repaid: 0, defaults: 0, loanDay: 0, loanDur: 30 };
+    }
+    function simPrice(p) { return Math.max(p * Math.exp(0.0002 + (Math.random()-0.5)*0.08), 1000); }
+    function fUSD(n) { return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n); }
+    function fBTC(n) { return n.toFixed(4)+" ₿"; }
+    function owed(loan, day) {
+      const d = Math.max(day - loan.originDay, 1);
+      const i = loan.amount * (loan.interest/100) * (d/365);
+      return { interest: i, total: loan.amount + i };
+    }
+
+    function MiniChart({history, w=220, h=55}) {
+      if (history.length < 2) return null;
+      const mn = Math.min(...history), mx = Math.max(...history), r = mx-mn||1;
+      const pts = history.map((v,i)=>`${(i/(history.length-1))*w},${h-((v-mn)/r)*(h-4)-2}`).join(" ");
+      const c = history[history.length-1] >= history[history.length-2] ? "#00e676" : "#ff1744";
+      return <svg width={w} height={h} style={{display:"block"}}><polyline fill="none" stroke={c} strokeWidth="2" points={pts} strokeLinejoin="round"/></svg>;
+    }
+
+    function Gauge({value, max, label, color}) {
+      const pct = Math.min(value/max,1)*100;
+      return <div style={{marginBottom:6}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#8a8a9a",marginBottom:2}}>
+          <span>{label}</span>
+          <span>{typeof value==="number"&&value%1!==0?value.toFixed(2):value}{label.includes("LTV")?"":"%"}</span>
+        </div>
+        <div style={{height:5,background:"#1a1a2e",borderRadius:3,overflow:"hidden"}}>
+          <div style={{width:`${pct}%`,height:"100%",background:color,borderRadius:3,transition:"width 0.4s"}}/>
+        </div>
+      </div>;
+    }
+
+    function App() {
+      const [day, setDay] = useState(0);
+      const [price, setPrice] = useState(INIT_BTC_PRICE);
+      const [hist, setHist] = useState([INIT_BTC_PRICE]);
+      const [btc, setBtc] = useState(INIT_BTC);
+      const [cash, setCash] = useState(0);
+      const [ltv, setLtv] = useState(INIT_LTV);
+      const [rate, setRate] = useState(INIT_INTEREST);
+      const [ltvStep, setLtvStep] = useState(INIT_LTV_STEP);
+      const [intStep, setIntStep] = useState(INIT_INT_STEP);
+      const [loans, setLoans] = useState([]);
+      const [nRepaid, setNRepaid] = useState(0);
+      const [nDefault, setNDefault] = useState(0);
+      const [gLtvStep, setGLtvStep] = useState(INIT_LTV_STEP);
+      const [gIntStep, setGIntStep] = useState(INIT_INT_STEP);
+      const [bots, setBots] = useState(()=> Array.from({length:N_BORROWERS},(_,i)=>genBorrower(i+1,INIT_LTV_STEP,INIT_INT_STEP)));
+      const [log, setLog] = useState([{day:0,msg:"Welcome. 2 BTC endowed. Borrow, trade, leverage.",type:"info"}]);
+      const [borrowAmt, setBorrowAmt] = useState("");
+      const [borrowDur, setBorrowDur] = useState(30);
+      const [showBorrow, setShowBorrow] = useState(false);
+      const [showTrade, setShowTrade] = useState(false);
+      const [tradeAmt, setTradeAmt] = useState("");
+      const [tradeSide, setTradeSide] = useState("buy");
+      const [liqConfirm, setLiqConfirm] = useState(null);
+      const logRef = useRef(null);
+
+      useEffect(()=>{ if(logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; },[log]);
+
+      const totalCollateral = loans.reduce((s,l)=>s+l.collateralBtc, 0);
+      const totalDebt = loans.reduce((s,l)=>s+owed(l,day).total, 0);
+      const maxBorrow = btc * price * ltv;
+      const netWorth = (btc + totalCollateral) * price + cash - totalDebt;
+
+      const addLog = useCallback((entries)=>{
+        setLog(prev=>[...prev.slice(-100),...(Array.isArray(entries)?entries:[entries])]);
+      },[]);
+
+      function handleBorrow() {
+        const amt = parseFloat(borrowAmt);
+        if (isNaN(amt)||amt<=0||amt>maxBorrow) return;
+        const coll = amt / (price * ltv);
+        setBtc(p=>p-coll);
+        setCash(p=>p+amt);
+        const newLoan = { id: loanIdCounter++, amount: amt, collateralBtc: coll, interest: rate, originDay: day, ltv, duration: borrowDur };
+        setLoans(p=>[...p, newLoan]);
+        setShowBorrow(false); setBorrowAmt("");
+        addLog({day, msg:`Loan #${newLoan.id}: Borrowed ${fUSD(amt)} against ${fBTC(coll)} · ${rate}% · ${borrowDur}d · LTV ${(ltv*100).toFixed(0)}%`, type:"borrow"});
+      }
+
+      function handleRepay(loanId) {
+        const loan = loans.find(l=>l.id===loanId);
+        if (!loan) return;
+        const {total: tot, interest: intAmt} = owed(loan, day);
+        if (cash >= tot) {
+          setCash(p=>p-tot);
+          setBtc(p=>p+loan.collateralBtc);
+          setLoans(p=>p.filter(l=>l.id!==loanId));
+          const nLtv = Math.min(ltv+ltvStep,1); const nR = rate+intStep;
+          setLtv(nLtv); setRate(nR); setNRepaid(p=>p+1);
+          addLog({day, msg:`Loan #${loan.id} repaid ${fUSD(tot)} (${fUSD(intAmt)} int). LTV→${(nLtv*100).toFixed(0)}% Rate→${nR}%`, type:"repay"});
+        } else {
+          const short = tot - cash;
+          const btcNeed = short / price;
+          const avail = btc + loan.collateralBtc;
+          if (btcNeed <= avail) {
+            setLiqConfirm({loanId, tot, short, btcNeed});
+          } else {
+            addLog({day, msg:`Loan #${loan.id}: Can't repay ${fUSD(tot)}. Not enough assets.`, type:"warn"});
+          }
+        }
+      }
+
+      function confirmLiqRepay() {
+        if (!liqConfirm) return;
+        const loan = loans.find(l=>l.id===liqConfirm.loanId);
+        if (!loan) { setLiqConfirm(null); return; }
+        const {total: tot} = owed(loan, day);
+        const short = tot - cash;
+        const btcSold = short / price;
+        const fromFree = Math.min(btcSold, btc);
+        const fromColl = btcSold - fromFree;
+        const collReturn = loan.collateralBtc - fromColl;
+        setCash(0);
+        setBtc(p=>p - fromFree + collReturn);
+        setLoans(p=>p.filter(l=>l.id!==loan.id));
+        const nLtv = Math.min(ltv+ltvStep,1); const nR = rate+intStep;
+        setLtv(nLtv); setRate(nR); setNRepaid(p=>p+1);
+        addLog({day, msg:`Loan #${loan.id} repaid ${fUSD(tot)}. Sold ${fBTC(btcSold)} BTC. LTV→${(nLtv*100).toFixed(0)}%`, type:"repay"});
+        setLiqConfirm(null);
+      }
+
+      function handleTrade() {
+        const amt = parseFloat(tradeAmt);
+        if (isNaN(amt)||amt<=0) return;
+        if (tradeSide === "buy") {
+          const cost = amt * price;
+          if (cost > cash) { addLog({day, msg:`Not enough cash to buy ${fBTC(amt)}.`, type:"warn"}); return; }
+          setCash(p=>p-cost); setBtc(p=>p+amt);
+          addLog({day, msg:`Bought ${fBTC(amt)} for ${fUSD(cost)} @ ${fUSD(price)}`, type:"borrow"});
+        } else {
+          if (amt > btc) { addLog({day, msg:`Not enough free BTC to sell ${fBTC(amt)}.`, type:"warn"}); return; }
+          const proceeds = amt * price;
+          setBtc(p=>p-amt); setCash(p=>p+proceeds);
+          addLog({day, msg:`Sold ${fBTC(amt)} for ${fUSD(proceeds)} @ ${fUSD(price)}`, type:"repay"});
+        }
+        setShowTrade(false); setTradeAmt("");
+      }
+
+      function nextDay() {
+        const nd = day+1;
+        setDay(nd);
+        const np = simPrice(price);
+        setPrice(np); setHist(p=>[...p.slice(-60),np]);
+        let lg = [];
+        let gls = gLtvStep, gis = gIntStep;
+        const dir = np>=price?"↑":"↓";
+        lg.push({day:nd, msg:`Day ${nd}: BTC ${fUSD(np)} (${dir} ${(((np-price)/price)*100).toFixed(2)}%)`, type:np>=price?"up":"down"});
+
+        let updatedLoans = [...loans];
+        let curBtc = btc;
+        let curCash = cash;
+        let curLtv = ltv;
+        let curRate = rate;
+        let curLs = ltvStep;
+        let curIs = intStep;
+        let repaidInc = 0;
+        let defaultInc = 0;
+        let toRemove = new Set();
+
+        for (const loan of updatedLoans) {
+          if (toRemove.has(loan.id)) continue;
+          const matDay = loan.originDay + loan.duration;
+
+          if (nd >= matDay) {
+            const {total: tot, interest: intAmt} = owed(loan, nd);
+            if (curCash >= tot) {
+              curCash -= tot;
+              curBtc += loan.collateralBtc;
+              const nL = Math.min(curLtv+curLs,1); const nR = curRate+curIs;
+              curLtv = nL; curRate = nR; repaidInc++;
+              lg.push({day:nd, msg:`MATURITY Loan #${loan.id}: Repaid ${fUSD(tot)} with cash. LTV→${(nL*100).toFixed(0)}%`, type:"repay"});
+              toRemove.add(loan.id);
+            } else {
+              const short = tot - curCash;
+              const btcNeed = short / np;
+              const avail = curBtc + loan.collateralBtc;
+              if (btcNeed <= avail) {
+                const fromFree = Math.min(btcNeed, curBtc);
+                const fromColl = btcNeed - fromFree;
+                curCash = 0;
+                curBtc = curBtc - fromFree + (loan.collateralBtc - fromColl);
+                const nL = Math.min(curLtv+curLs,1); const nR = curRate+curIs;
+                curLtv = nL; curRate = nR; repaidInc++;
+                lg.push({day:nd, msg:`MATURITY Loan #${loan.id}: Repaid ${fUSD(tot)}. Sold ${fBTC(btcNeed)} BTC. LTV→${(nL*100).toFixed(0)}%`, type:"repay"});
+                toRemove.add(loan.id);
+              } else {
+                lg.push({day:nd, msg:`DEFAULT Loan #${loan.id} on maturity. Collateral (${fBTC(loan.collateralBtc)}) confiscated.`, type:"default"});
+                curLtv = INIT_LTV; curRate = INIT_INTEREST; defaultInc++;
+                gls = Math.max(gls-0.01,0.01); gis = 2;
+                curLs = gls; curIs = gis;
+                toRemove.add(loan.id);
+              }
+            }
+          } else {
+            const curRatio = loan.amount / (loan.collateralBtc * np);
+            if (curRatio > loan.ltv && curBtc > 0.00001) {
+              const reqColl = loan.amount / (loan.ltv * np);
+              const deficit = reqColl - loan.collateralBtc;
+              if (deficit > 0.00001) {
+                const toAdd = Math.min(deficit, curBtc);
+                loan.collateralBtc += toAdd;
+                curBtc -= toAdd;
+                lg.push({day:nd, msg:`LTV MAINT Loan #${loan.id}: +${fBTC(toAdd)} collateral`, type:"warn"});
+              }
+            }
+            const cv = loan.collateralBtc * np;
+            if (cv < loan.amount) {
+              lg.push({day:nd, msg:`DEFAULT Loan #${loan.id}. Collateral ${fUSD(cv)} < ${fUSD(loan.amount)}. Confiscated.`, type:"default"});
+              curLtv = INIT_LTV; curRate = INIT_INTEREST; defaultInc++;
+              gls = Math.max(gls-0.01,0.01); gis = 2;
+              curLs = gls; curIs = gis;
+              toRemove.add(loan.id);
+            }
+          }
+        }
+
+        setBtc(curBtc); setCash(curCash); setLtv(curLtv); setRate(curRate);
+        setLtvStep(curLs); setIntStep(curIs);
+        setNRepaid(p=>p+repaidInc); setNDefault(p=>p+defaultInc);
+        setLoans(updatedLoans.filter(l=>!toRemove.has(l.id)));
+
+        setBots(prev=>prev.map(b=>{
+          let u={...b};
+          if(u.hasLoan){
+            const cv=u.collateral*np;
+            const mat=u.loanDay+u.loanDur;
+            if(cv<u.loanAmt){
+              lg.push({day:nd,msg:`${u.name} defaulted!`,type:"other-default"});
+              u.hasLoan=false;u.loanAmt=0;u.collateral=0;u.ltv=INIT_LTV;u.interest=INIT_INTEREST;u.defaults++;
+              gls=Math.max(gls-0.01,0.01);gis=2;u.ltvStep=gls;u.intStep=gis;
+            } else if(nd>=mat||Math.random()<0.12){
+              const dh=Math.max(nd-u.loanDay,1);
+              u.cash-=u.loanAmt+u.loanAmt*(u.interest/100)*(dh/365);
+              u.btc+=u.collateral;u.hasLoan=false;u.collateral=0;u.repaid++;
+              const nL=Math.min(u.ltv+u.ltvStep,1);u.ltv=nL;u.interest+=u.intStep;u.loanAmt=0;
+              lg.push({day:nd,msg:`${u.name} repaid. LTV→${(nL*100).toFixed(0)}%`,type:"other-repay"});
+            }
+          } else if(u.btc>0.01&&Math.random()<0.2){
+            const dur=[7,14,30,60,90][Math.floor(Math.random()*5)];
+            const la=u.btc*np*u.ltv*(0.3+Math.random()*0.7);
+            const co=la/(np*u.ltv);
+            if(co<=u.btc){
+              u.hasLoan=true;u.loanAmt=la;u.collateral=co;u.btc-=co;u.cash+=la;u.loanDay=nd;u.loanDur=dur;
+              lg.push({day:nd,msg:`${u.name} borrowed ${fUSD(la)} ${dur}d`,type:"other-borrow"});
+            }
+          }
+          return u;
+        }));
+
+        setGLtvStep(gls); setGIntStep(gis);
+        addLog(lg);
+      }
+
+      const tc = {
+        info:"#8a8a9a",borrow:"#ffd740",repay:"#00e676",warn:"#ff9100",default:"#ff1744",
+        up:"#00e676",down:"#ff1744","other-default":"#ff6e40","other-borrow":"#7c7c8a","other-repay":"#5c5c6a"
+      };
+      const inp = {width:"100%",background:"#0a0a14",border:"1px solid #2a2a4a",borderRadius:8,padding:"10px 12px",color:"#e0e0e8",fontSize:15,fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
+
+      return (
+        <div style={{minHeight:"100vh",background:"#0a0a14",color:"#e0e0e8",fontFamily:"'JetBrains Mono','Fira Code','SF Mono',monospace",padding:16,boxSizing:"border-box"}}>
+          <style>{`
+            @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+            *{box-sizing:border-box;margin:0;padding:0}
+            ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0a0a14}::-webkit-scrollbar-thumb{background:#2a2a3e;border-radius:2px}
+            @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+            @keyframes slideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+            @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+            .cd{background:#12122a;border:1px solid #1e1e3a;border-radius:10px;padding:16px}
+            .bt{border:none;cursor:pointer;border-radius:7px;font-family:inherit;font-weight:600;transition:all .2s}
+            .bt:hover{transform:translateY(-1px);filter:brightness(1.1)}.bt:active{transform:translateY(0)}
+            .gw{box-shadow:0 0 24px rgba(255,215,64,.07)}
+            .mo{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:100;animation:fadeIn .2s}
+            .md{background:#12122a;border:1px solid #2a2a4a;border-radius:14px;padding:24px;width:400px;max-width:92vw;animation:slideIn .3s}
+            .br{display:grid;grid-template-columns:1fr 70px 80px 50px 40px 50px;gap:5px;align-items:center;padding:5px 0;border-bottom:1px solid #1a1a2e;font-size:10px}
+            .br:last-child{border-bottom:none}
+            .lr{background:#0e0e20;border:1px solid #1a1a2e;border-radius:8px;padding:10px;margin-bottom:8px;animation:slideIn .3s}
+          `}</style>
+
+          {/* Header */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:10}}>
+            <div>
+              <h1 style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700,color:"#ffd740",letterSpacing:"-0.5px"}}>₿ COLLATERAL PROTOCOL</h1>
+              <p style={{fontSize:10,color:"#5a5a6a",marginTop:1}}>Multi-Loan BTC Lending & Trading</p>
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <div style={{background:"#1a1a2e",borderRadius:7,padding:"6px 12px",fontSize:11}}>
+                <span style={{color:"#5a5a6a"}}>DAY </span><span style={{color:"#ffd740",fontWeight:700,fontSize:15}}>{day}</span>
+              </div>
+              <button className="bt" onClick={()=>setShowTrade(true)} style={{background:"#1a1a2e",border:"1px solid #2a2a4a",color:"#00e676",padding:"8px 16px",fontSize:12}}>TRADE</button>
+              <button className="bt" onClick={nextDay} style={{background:"linear-gradient(135deg,#ffd740,#ffab00)",color:"#0a0a14",padding:"8px 20px",fontSize:12,letterSpacing:.5}}>NEXT DAY →</button>
+            </div>
+          </div>
+
+          {/* Top row */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
+            <div className="cd gw">
+              <div style={{fontSize:9,color:"#5a5a6a",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Bitcoin Price</div>
+              <div style={{fontSize:26,fontWeight:700,color:hist.length>1&&price>=hist[hist.length-2]?"#00e676":"#ff1744"}}>{fUSD(price)}</div>
+              <div style={{marginTop:10}}><MiniChart history={hist}/></div>
+              <div style={{display:"flex",gap:14,marginTop:8,fontSize:9,color:"#5a5a6a"}}>
+                <span>H: {fUSD(Math.max(...hist))}</span><span>L: {fUSD(Math.min(...hist))}</span>
+              </div>
+            </div>
+
+            <div className="cd">
+              <div style={{fontSize:9,color:"#5a5a6a",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Portfolio</div>
+              <div style={{fontSize:22,fontWeight:700}}>{fUSD(netWorth)}</div>
+              <div style={{fontSize:9,color:"#5a5a6a",marginBottom:10}}>Net Worth</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <div style={{background:"#0e0e20",borderRadius:7,padding:8}}>
+                  <div style={{fontSize:9,color:"#ffd740"}}>Free BTC</div>
+                  <div style={{fontSize:13,fontWeight:600,marginTop:1}}>{fBTC(btc)}</div>
+                  <div style={{fontSize:9,color:"#5a5a6a"}}>{fUSD(btc*price)}</div>
+                </div>
+                <div style={{background:"#0e0e20",borderRadius:7,padding:8}}>
+                  <div style={{fontSize:9,color:"#00e676"}}>Cash</div>
+                  <div style={{fontSize:13,fontWeight:600,marginTop:1}}>{fUSD(cash)}</div>
+                </div>
+              </div>
+              {totalCollateral > 0 && <div style={{background:"#1a0a0a",border:"1px solid #3a1a1a",borderRadius:7,padding:8,marginTop:8}}>
+                <div style={{fontSize:9,color:"#ff6e40"}}>Locked Collateral</div>
+                <div style={{fontSize:12,fontWeight:600,marginTop:1}}>{fBTC(totalCollateral)} <span style={{color:"#5a5a6a",fontWeight:400}}>({fUSD(totalCollateral*price)})</span></div>
+              </div>}
+              {totalDebt > 0 && <div style={{marginTop:6,fontSize:10,color:"#ff6e40"}}>Total Debt: {fUSD(totalDebt)}</div>}
+            </div>
+
+            <div className="cd">
+              <div style={{fontSize:9,color:"#5a5a6a",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Borrowing Power</div>
+              <Gauge value={ltv} max={1} label={`LTV: ${(ltv*100).toFixed(0)}%`} color="#ffd740"/>
+              <Gauge value={rate} max={50} label={`Rate: ${rate}%`} color="#ff6e40"/>
+              <div style={{display:"flex",gap:8,fontSize:9,color:"#5a5a6a",marginBottom:8}}>
+                <span>Repaid: {nRepaid}</span><span>·</span><span>Defaults: {nDefault}</span><span>·</span><span>Active: {loans.length}</span>
+              </div>
+              <div style={{fontSize:10,color:"#5a5a6a",marginBottom:6}}>Max new loan: {fUSD(maxBorrow)}</div>
+              <button className="bt" onClick={()=>setShowBorrow(true)} disabled={maxBorrow<=0} style={{
+                width:"100%",background:maxBorrow>0?"#ffd740":"#2a2a3e",color:maxBorrow>0?"#0a0a14":"#5a5a6a",
+                padding:"9px",fontSize:11,cursor:maxBorrow>0?"pointer":"not-allowed"
+              }}>+ NEW LOAN</button>
+            </div>
+          </div>
+
+          {/* Active Loans */}
+          {loans.length > 0 && (
+            <div className="cd" style={{marginBottom:12}}>
+              <div style={{fontSize:9,color:"#5a5a6a",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>
+                Active Loans ({loans.length})
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:8}}>
+                {loans.map(loan => {
+                  const {interest: intAcc, total: tot} = owed(loan, day);
+                  const drem = Math.max((loan.originDay+loan.duration)-day, 0);
+                  const curRatio = loan.amount / (loan.collateralBtc * price);
+                  const health = (loan.collateralBtc * price) / loan.amount;
+                  return (
+                    <div key={loan.id} className="lr">
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                        <span style={{fontSize:12,fontWeight:700,color:"#ff6e40"}}>Loan #{loan.id}</span>
+                        <span style={{
+                          fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:4,
+                          background:drem<=3?"#3a1010":"#1a1a2e",
+                          color:drem<=3?"#ff1744":drem<=7?"#ffd740":"#8a8a9a",
+                          animation:drem<=3?"pulse 1.5s infinite":"none"
+                        }}>{drem}d left</span>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,fontSize:10,marginBottom:6}}>
+                        <div><span style={{color:"#5a5a6a"}}>Principal: </span>{fUSD(loan.amount)}</div>
+                        <div><span style={{color:"#5a5a6a"}}>Owed: </span><span style={{color:"#ff9100"}}>{fUSD(tot)}</span></div>
+                        <div><span style={{color:"#5a5a6a"}}>Collateral: </span>{fBTC(loan.collateralBtc)}</div>
+                        <div><span style={{color:"#5a5a6a"}}>Interest: </span>{fUSD(intAcc)}</div>
+                      </div>
+                      <Gauge value={curRatio} max={1} label={`LTV ${(curRatio*100).toFixed(1)}%`}
+                        color={curRatio>0.9?"#ff1744":curRatio>0.7?"#ffd740":"#00e676"}/>
+                      <div style={{display:"flex",gap:6,marginTop:4}}>
+                        <div style={{flex:1,fontSize:9,color:health>1.5?"#00e676":health>1.1?"#ffd740":"#ff1744"}}>
+                          Health: {health.toFixed(2)}x
+                        </div>
+                        <button className="bt" onClick={()=>handleRepay(loan.id)} style={{
+                          background:"#00e676",color:"#0a0a14",padding:"5px 14px",fontSize:10
+                        }}>REPAY</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Bottom: Participants | Log */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div className="cd" style={{maxHeight:300,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <div style={{fontSize:9,color:"#5a5a6a",textTransform:"uppercase",letterSpacing:1}}>Market</div>
+                <div style={{fontSize:9,color:"#5a5a6a"}}>LTV↑{(gLtvStep*100).toFixed(0)}% · Int↑{gIntStep}%</div>
+              </div>
+              <div className="br" style={{color:"#5a5a6a",fontSize:9,fontWeight:600,borderBottom:"1px solid #2a2a3e"}}>
+                <span>Name</span><span>BTC</span><span>Loan</span><span>LTV</span><span>Def</span><span>Days</span>
+              </div>
+              <div style={{overflowY:"auto",flex:1}}>
+                {bots.map(b=>(
+                  <div key={b.id} className="br">
+                    <span style={{color:b.hasLoan?"#ff6e40":"#5a5a6a"}}>{b.hasLoan?"●":"○"} {b.name}</span>
+                    <span>{b.btc.toFixed(2)}₿</span>
+                    <span style={{color:b.hasLoan?"#ff6e40":"#3a3a4a"}}>{b.hasLoan?fUSD(b.loanAmt):"—"}</span>
+                    <span>{(b.ltv*100).toFixed(0)}%</span>
+                    <span style={{color:b.defaults>0?"#ff1744":"#3a3a4a"}}>{b.defaults}</span>
+                    <span style={{color:"#5a5a6a"}}>{b.hasLoan?`${Math.max((b.loanDay+b.loanDur)-day,0)}d`:"—"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="cd" style={{maxHeight:300,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+              <div style={{fontSize:9,color:"#5a5a6a",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Event Log</div>
+              <div ref={logRef} style={{overflowY:"auto",flex:1}}>
+                {log.map((e,i)=>(
+                  <div key={i} style={{
+                    fontSize:10,color:tc[e.type]||"#8a8a9a",padding:"2px 0",
+                    borderLeft:e.type==="default"?"2px solid #ff1744":e.type==="repay"?"2px solid #00e676":e.type==="warn"?"2px solid #ff9100":"2px solid transparent",
+                    paddingLeft:7,animation:"slideIn .3s"
+                  }}>{e.msg}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{display:"flex",gap:16,justifyContent:"center",marginTop:12,fontSize:9,color:"#3a3a4a",flexWrap:"wrap"}}>
+            <span>Repay → LTV+{(gLtvStep*100).toFixed(0)}% Rate+{gIntStep}%</span><span>·</span>
+            <span>Default → Reset + global LTV step−1%</span><span>·</span>
+            <span>Auto LTV maintenance + maturity repay</span><span>·</span>
+            <span>Buy BTC with cash → use as collateral → borrow more</span>
+          </div>
+
+          {/* BORROW MODAL */}
+          {showBorrow && (
+            <div className="mo" onClick={()=>setShowBorrow(false)}>
+              <div className="md" onClick={e=>e.stopPropagation()}>
+                <h3 style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:17,fontWeight:700,marginBottom:3,color:"#ffd740"}}>New Loan</h3>
+                <p style={{fontSize:10,color:"#5a5a6a",marginBottom:16}}>
+                  LTV {(ltv*100).toFixed(0)}% · {rate}% APR · Max {fUSD(maxBorrow)}
+                </p>
+                <div style={{marginBottom:14}}>
+                  <label style={{fontSize:9,color:"#8a8a9a",display:"block",marginBottom:5}}>Duration</label>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:5}}>
+                    {[7,14,30,60,90].map(d=>(
+                      <button key={d} className="bt" onClick={()=>setBorrowDur(d)} style={{
+                        padding:"7px 2px",fontSize:10,textAlign:"center",borderRadius:5,
+                        background:borrowDur===d?"#ffd740":"#1a1a2e",color:borrowDur===d?"#0a0a14":"#8a8a9a",
+                        border:borrowDur===d?"none":"1px solid #2a2a3e"
+                      }}>{d}d</button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{marginBottom:14}}>
+                  <label style={{fontSize:9,color:"#8a8a9a",display:"block",marginBottom:5}}>Amount (USD)</label>
+                  <input type="number" value={borrowAmt} onChange={e=>setBorrowAmt(e.target.value)} placeholder="0.00" style={inp}/>
+                  <div style={{display:"flex",gap:5,marginTop:6}}>
+                    {[0.25,0.5,0.75,1].map(p=>(
+                      <button key={p} className="bt" onClick={()=>setBorrowAmt((maxBorrow*p).toFixed(0))} style={{
+                        flex:1,background:"#1a1a2e",color:"#8a8a9a",padding:"5px",fontSize:9
+                      }}>{(p*100)}%</button>
+                    ))}
+                  </div>
+                </div>
+                {borrowAmt && parseFloat(borrowAmt)>0 && (()=>{
+                  const a=parseFloat(borrowAmt); const coll=a/(price*ltv);
+                  return <div style={{background:"#0e0e20",borderRadius:7,padding:10,marginBottom:14,fontSize:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                      <span style={{color:"#5a5a6a"}}>Collateral</span><span>{fBTC(coll)}</span>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                      <span style={{color:"#5a5a6a"}}>Liq. price</span><span style={{color:"#ff1744"}}>{fUSD(a/coll)}</span>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                      <span style={{color:"#5a5a6a"}}>Interest ({borrowDur}d)</span><span>{fUSD(a*(rate/100)*(borrowDur/365))}</span>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between"}}>
+                      <span style={{color:"#5a5a6a"}}>Maturity</span><span>Day {day+borrowDur}</span>
+                    </div>
+                  </div>;
+                })()}
+                <div style={{display:"flex",gap:8}}>
+                  <button className="bt" onClick={()=>setShowBorrow(false)} style={{flex:1,background:"#1a1a2e",color:"#8a8a9a",padding:"10px",fontSize:11}}>Cancel</button>
+                  <button className="bt" onClick={handleBorrow} disabled={!borrowAmt||parseFloat(borrowAmt)<=0||parseFloat(borrowAmt)>maxBorrow}
+                    style={{flex:1,padding:"10px",fontSize:11,color:"#0a0a14",
+                      background:borrowAmt&&parseFloat(borrowAmt)>0&&parseFloat(borrowAmt)<=maxBorrow?"#ffd740":"#2a2a3e"
+                    }}>Confirm</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TRADE MODAL */}
+          {showTrade && (
+            <div className="mo" onClick={()=>setShowTrade(false)}>
+              <div className="md" onClick={e=>e.stopPropagation()}>
+                <h3 style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:17,fontWeight:700,marginBottom:3,color:"#00e676"}}>Trade BTC</h3>
+                <p style={{fontSize:10,color:"#5a5a6a",marginBottom:16}}>Current price: {fUSD(price)}</p>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:14}}>
+                  <button className="bt" onClick={()=>setTradeSide("buy")} style={{
+                    padding:"10px",fontSize:12,borderRadius:7,
+                    background:tradeSide==="buy"?"#00e676":"#1a1a2e",color:tradeSide==="buy"?"#0a0a14":"#8a8a9a",
+                    border:tradeSide==="buy"?"none":"1px solid #2a2a3e"
+                  }}>BUY BTC</button>
+                  <button className="bt" onClick={()=>setTradeSide("sell")} style={{
+                    padding:"10px",fontSize:12,borderRadius:7,
+                    background:tradeSide==="sell"?"#ff1744":"#1a1a2e",color:tradeSide==="sell"?"#fff":"#8a8a9a",
+                    border:tradeSide==="sell"?"none":"1px solid #2a2a3e"
+                  }}>SELL BTC</button>
+                </div>
+                <div style={{marginBottom:14}}>
+                  <label style={{fontSize:9,color:"#8a8a9a",display:"block",marginBottom:5}}>Amount (BTC)</label>
+                  <input type="number" value={tradeAmt} onChange={e=>setTradeAmt(e.target.value)} placeholder="0.0000" step="0.0001" style={inp}/>
+                  <div style={{display:"flex",gap:5,marginTop:6}}>
+                    {tradeSide==="buy" ? (
+                      [0.25,0.5,0.75,1].map(p=>{
+                        const maxBuy = cash/price;
+                        return <button key={p} className="bt" onClick={()=>setTradeAmt((maxBuy*p).toFixed(4))} style={{
+                          flex:1,background:"#1a1a2e",color:"#8a8a9a",padding:"5px",fontSize:9
+                        }}>{(p*100)}%</button>;
+                      })
+                    ) : (
+                      [0.25,0.5,0.75,1].map(p=>(
+                        <button key={p} className="bt" onClick={()=>setTradeAmt((btc*p).toFixed(4))} style={{
+                          flex:1,background:"#1a1a2e",color:"#8a8a9a",padding:"5px",fontSize:9
+                        }}>{(p*100)}%</button>
+                      ))
+                    )}
+                  </div>
+                </div>
+                {tradeAmt && parseFloat(tradeAmt)>0 && (()=>{
+                  const a=parseFloat(tradeAmt);
+                  const usdVal = a*price;
+                  const canDo = tradeSide==="buy" ? cash>=usdVal : btc>=a;
+                  return <div style={{background:"#0e0e20",borderRadius:7,padding:10,marginBottom:14,fontSize:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                      <span style={{color:"#5a5a6a"}}>{tradeSide==="buy"?"Cost":"Proceeds"}</span>
+                      <span style={{color:canDo?"#e0e0e8":"#ff1744"}}>{fUSD(usdVal)}</span>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between"}}>
+                      <span style={{color:"#5a5a6a"}}>{tradeSide==="buy"?"Cash after":"BTC after"}</span>
+                      <span>{tradeSide==="buy"?fUSD(cash-usdVal):fBTC(btc-a)}</span>
+                    </div>
+                    {!canDo && <div style={{color:"#ff1744",fontSize:9,marginTop:4}}>Insufficient {tradeSide==="buy"?"cash":"BTC"}</div>}
+                  </div>;
+                })()}
+                <div style={{display:"flex",gap:8}}>
+                  <button className="bt" onClick={()=>{setShowTrade(false);setTradeAmt("")}} style={{flex:1,background:"#1a1a2e",color:"#8a8a9a",padding:"10px",fontSize:11}}>Cancel</button>
+                  <button className="bt" onClick={handleTrade} disabled={!tradeAmt||parseFloat(tradeAmt)<=0}
+                    style={{flex:1,padding:"10px",fontSize:11,color:tradeSide==="sell"?"#fff":"#0a0a14",
+                      background:tradeAmt&&parseFloat(tradeAmt)>0?(tradeSide==="buy"?"#00e676":"#ff1744"):"#2a2a3e"
+                    }}>{tradeSide==="buy"?"Buy":"Sell"}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* LIQUIDATE CONFIRM */}
+          {liqConfirm && (
+            <div className="mo" onClick={()=>setLiqConfirm(null)}>
+              <div className="md" onClick={e=>e.stopPropagation()}>
+                <h3 style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:17,fontWeight:700,marginBottom:6,color:"#ff9100"}}>Insufficient Cash</h3>
+                <p style={{fontSize:11,color:"#8a8a9a",marginBottom:14,lineHeight:1.5}}>Sell BTC to cover the shortfall?</p>
+                <div style={{background:"#0e0e20",borderRadius:7,padding:12,marginBottom:16,fontSize:11}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                    <span style={{color:"#5a5a6a"}}>Total owed</span><span style={{color:"#ff6e40",fontWeight:600}}>{fUSD(liqConfirm.tot)}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                    <span style={{color:"#5a5a6a"}}>Your cash</span><span>{fUSD(cash)}</span>
+                  </div>
+                  <div style={{height:1,background:"#2a2a3e",margin:"6px 0"}}/>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                    <span style={{color:"#5a5a6a"}}>Shortfall</span><span style={{color:"#ff1744",fontWeight:600}}>{fUSD(liqConfirm.short)}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between"}}>
+                    <span style={{color:"#5a5a6a"}}>BTC to sell</span><span style={{color:"#ffd740",fontWeight:600}}>{fBTC(liqConfirm.btcNeed)}</span>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="bt" onClick={()=>setLiqConfirm(null)} style={{flex:1,background:"#1a1a2e",color:"#8a8a9a",padding:"10px",fontSize:11}}>Cancel</button>
+                  <button className="bt" onClick={confirmLiqRepay} style={{flex:1,background:"#ff9100",color:"#0a0a14",padding:"10px",fontSize:11}}>Sell & Repay</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
