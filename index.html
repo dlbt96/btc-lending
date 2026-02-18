@@ -788,10 +788,10 @@ function updateLenderHeader(){
   setText('l-tick-day',day+'');setText('l-tick-name',myName);
   el('l-day-badge').textContent='DAY '+day;
   setText('l-trade-price',fUSD(price));
-  drawChart('l-chart',myNWHistory.length>1?myNWHistory:hist,180,28);
   const p=gameData.price||65000, bv=(myWallet.btc||0)*p, nw=(myWallet.cash||0)+bv;
   setText('l-tick-price',fUSD(p));
   myNWHistory.push(nw);if(myNWHistory.length>60)myNWHistory.shift();
+  drawChart('l-chart',myNWHistory.length>1?myNWHistory:hist,180,28);
 }
 function updateLenderWallet(){
   const price=gameData.price||65000;
@@ -988,11 +988,10 @@ function initBorrower(){
   db.ref(`rooms/${roomCode}/openRequests`).on('value',snap=>{openRequestsData=snap.val()||{};renderMyOpenRequests();});
 }
 function updateBorrowerHeader(){
-  const day=gameData.day||0, price=gameData.price||65000, hist=gameData.priceHistory||[price];
+  const day=gameData.day||0, price=gameData.price||65000;
   el('b-day-badge').textContent='DAY '+day;
   setText('b-tick-price',fUSD(price));setText('b-tick-day',day+'');setText('b-tick-name',myName);
   setText('b-trade-price',fUSD(price));
-  drawChart('b-chart',myNWHistory.length>1?myNWHistory:hist,180,28);
 }
 function updateBorrowerWallet(){
   const price=gameData.price||65000, tau=gameSettings.tau||2;
@@ -1014,6 +1013,7 @@ function updateBorrowerWallet(){
   const loanDot=myLoans.some(l=>owed(l,gameData.day||0).total>(myWallet.cash||0));
   loanDot?show('b-loan-dot'):hide('b-loan-dot');
   myNWHistory.push(nw);if(myNWHistory.length>60)myNWHistory.shift();
+  drawChart('b-chart',myNWHistory.length>1?myNWHistory:[nw,nw],180,28);
 }
 function renderBorrowerOffers(){
   const offers=Object.entries(offersData).filter(([,o])=>o.active);
