@@ -1,627 +1,1497 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>₿ Collateral Protocol – BTC Lending Sim</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-  <style>
-    body { margin: 0; background: #0a0a14; }
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>₿ Collateral Protocol — Multiplayer</title>
+
+<!-- Firebase compat SDK (v9 compat layer = works with plain firebase.xxx calls) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+:root {
+  --bg: #060a0f;
+  --surface: #0d1520;
+  --surface2: #111e2e;
+  --border: #1a2d42;
+  --border2: #243d58;
+  --gold: #f5c842;
+  --gold2: #e8a800;
+  --green: #00d68f;
+  --red: #ff3b5c;
+  --blue: #3d9bff;
+  --orange: #ff7a3d;
+  --text: #e8eef5;
+  --muted: #4a6080;
+  --muted2: #6b8aaa;
+  --font: 'Syne', sans-serif;
+  --mono: 'DM Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); overflow-x: hidden; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ── LAYOUT ── */
+#app { min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ── SCREENS ── */
+.screen { display: none; flex-direction: column; min-height: 100vh; padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; }
+.screen.active { display: flex; }
+
+/* ── TYPOGRAPHY ── */
+h1 { font-size: clamp(28px, 5vw, 52px); font-weight: 800; letter-spacing: -1px; line-height: 1; }
+h2 { font-size: clamp(18px, 3vw, 26px); font-weight: 700; }
+h3 { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; color: var(--muted2); }
+.mono { font-family: var(--mono); }
+
+/* ── CARDS ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(61,155,255,0.03) 0%, transparent 60%);
+  pointer-events: none;
+}
+.card-sm { padding: 14px; border-radius: 12px; }
+
+/* ── BUTTONS ── */
+.btn {
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  padding: 12px 22px;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+.btn:hover { transform: translateY(-1px); filter: brightness(1.12); }
+.btn:active { transform: translateY(0); filter: brightness(0.95); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; filter: none; }
+
+.btn-gold { background: var(--gold); color: #0a0a0a; }
+.btn-green { background: var(--green); color: #0a0a0a; }
+.btn-red { background: var(--red); color: #fff; }
+.btn-blue { background: var(--blue); color: #fff; }
+.btn-ghost { background: transparent; color: var(--muted2); border: 1px solid var(--border2); }
+.btn-ghost:hover { background: var(--surface2); color: var(--text); }
+.btn-surface { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-lg { padding: 16px 32px; font-size: 16px; border-radius: 14px; }
+.btn-sm { padding: 7px 14px; font-size: 11px; border-radius: 7px; }
+.btn-full { width: 100%; }
+
+/* ── INPUTS ── */
+.inp {
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 12px 16px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 15px;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.2s;
+}
+.inp:focus { border-color: var(--gold); }
+.inp::placeholder { color: var(--muted); }
+
+/* ── BADGE ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+.badge-lender { background: rgba(0,214,143,0.15); color: var(--green); border: 1px solid rgba(0,214,143,0.3); }
+.badge-borrower { background: rgba(245,200,66,0.15); color: var(--gold); border: 1px solid rgba(245,200,66,0.3); }
+.badge-teacher { background: rgba(61,155,255,0.15); color: var(--blue); border: 1px solid rgba(61,155,255,0.3); }
+
+/* ── TAG ── */
+.tag { font-family: var(--mono); font-size: 10px; color: var(--muted2); background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; }
+
+/* ── PILL TABS ── */
+.tabs { display: flex; gap: 6px; background: var(--surface2); border-radius: 12px; padding: 5px; }
+.tab { flex: 1; text-align: center; padding: 8px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 700; color: var(--muted2); transition: all 0.2s; border: none; background: transparent; font-family: var(--font); }
+.tab.active { background: var(--surface); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+
+/* ── DIVIDER ── */
+.divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+/* ── GRID ── */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+/* ── STAT ── */
+.stat { display: flex; flex-direction: column; gap: 3px; }
+.stat-label { font-size: 10px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.stat-value { font-family: var(--mono); font-size: 22px; font-weight: 500; }
+.stat-sub { font-family: var(--mono); font-size: 11px; color: var(--muted2); }
+
+/* ── PRICE BAR ── */
+.price-up { color: var(--green); }
+.price-down { color: var(--red); }
+
+/* ── HEALTH BAR ── */
+.hbar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; margin-top: 4px; }
+.hbar-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+
+/* ── LOAN CARD ── */
+.loan-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+.loan-card.urgent { border-color: var(--red); background: rgba(255,59,92,0.05); }
+.loan-card.warning { border-color: var(--gold); background: rgba(245,200,66,0.05); }
+
+/* ── OFFER CARD ── */
+.offer-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s; }
+.offer-card:hover { border-color: var(--border2); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+.offer-card.selected { border-color: var(--gold); background: rgba(245,200,66,0.07); }
+
+/* ── MINI CHART ── */
+canvas.minichart { display: block; }
+
+/* ── LOG ── */
+.log-entry { font-family: var(--mono); font-size: 11px; padding: 5px 0; border-bottom: 1px solid rgba(26,45,66,0.5); line-height: 1.5; }
+.log-entry:last-child { border-bottom: none; }
+.log-up { color: var(--green); }
+.log-down { color: var(--red); }
+.log-warn { color: var(--orange); }
+.log-info { color: var(--muted2); }
+.log-gold { color: var(--gold); }
+
+/* ── MODAL ── */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; z-index: 200; backdrop-filter: blur(4px); }
+.modal { background: var(--surface); border: 1px solid var(--border2); border-radius: 20px; padding: 28px; width: 440px; max-width: 94vw; }
+
+/* ── TICKER ── */
+.ticker { font-family: var(--mono); background: var(--surface2); border-bottom: 1px solid var(--border); padding: 8px 24px; font-size: 11px; color: var(--muted2); display: flex; gap: 24px; overflow: hidden; }
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.5} }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes slideIn { from { opacity:0; transform:translateX(-10px); } to { opacity:1; transform:translateX(0); } }
+.fade-up { animation: fadeUp 0.4s ease forwards; }
+.blink { animation: pulse 1.5s infinite; }
+.spin { animation: spin 0.8s linear infinite; }
+
+/* ── LOBBY ── */
+.player-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--surface2); border-radius: 10px; margin-bottom: 6px; font-size: 13px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.dot-green { background: var(--green); }
+.dot-gray { background: var(--muted); }
+
+/* ── PROGRESS ── */
+.progress-ring { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+
+/* ── TEACHER controls ── */
+.control-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface2); border-radius: 10px; margin-bottom: 8px; }
+
+/* ── REQUEST CARD (lender sees) ── */
+.request-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; transition: border-color 0.2s; }
+.request-card.pending { border-left: 3px solid var(--gold); }
+.request-card.approved { border-left: 3px solid var(--green); }
+.request-card.rejected { border-left: 3px solid var(--red); opacity: 0.5; }
+
+/* hero gradient */
+.hero-glow { position: relative; }
+.hero-glow::after {
+  content: '';
+  position: absolute;
+  top: -60px; left: 50%; transform: translateX(-50%);
+  width: 600px; height: 300px;
+  background: radial-gradient(ellipse, rgba(245,200,66,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* role card */
+.role-reveal {
+  background: var(--surface);
+  border: 2px solid var(--border2);
+  border-radius: 20px;
+  padding: 40px 32px;
+  text-align: center;
+  animation: fadeUp 0.5s ease;
+}
+.role-icon { font-size: 64px; margin-bottom: 16px; display: block; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 700px) {
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .screen { padding: 14px; }
+}
+</style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel">
-    const { useState, useEffect, useCallback, useRef } = React;
+<!-- Loading overlay -->
+<div id="loading-overlay" style="position:fixed;inset:0;background:#060a0f;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999">
+  <div style="font-size:48px;margin-bottom:16px">₿</div>
+  <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700;color:#f5c842;margin-bottom:8px">Collateral Protocol</div>
+  <div style="width:24px;height:24px;border:2px solid #1a2d42;border-top-color:#f5c842;border-radius:50%;animation:spin 0.8s linear infinite;margin-top:16px"></div>
+  <div style="font-family:monospace;font-size:12px;color:#4a6080;margin-top:12px" id="loading-msg">Connecting...</div>
+</div>
 
-    const INIT_BTC_PRICE = 65000;
-    const INIT_BTC = 2.0;
-    const INIT_LTV = 0.3;
-    const INIT_INTEREST = 9;
-    const INIT_LTV_STEP = 0.1;
-    const INIT_INT_STEP = 1;
-    const N_BORROWERS = 8;
-    let loanIdCounter = 1;
+<div id="app">
 
-    function genBorrower(id, ls, is) {
-      return { id, name: `Borrower ${id}`, btc: +(Math.random()*3+0.5).toFixed(4), cash: 0,
-        ltv: INIT_LTV, interest: INIT_INTEREST, ltvStep: ls, intStep: is,
-        hasLoan: false, loanAmt: 0, collateral: 0, repaid: 0, defaults: 0, loanDay: 0, loanDur: 30 };
-    }
-    function simPrice(p) { return Math.max(p * Math.exp(0.0002 + (Math.random()-0.5)*0.08), 1000); }
-    function fUSD(n) { return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n); }
-    function fBTC(n) { return n.toFixed(4)+" ₿"; }
-    function owed(loan, day) {
-      const d = Math.max(day - loan.originDay, 1);
-      const i = loan.amount * (loan.interest/100) * (d/365);
-      return { interest: i, total: loan.amount + i };
-    }
+<!-- ══════════════════════════════ SCREEN: JOIN ══════════════════════════════ -->
+<div class="screen active" id="screen-join">
+  <div style="max-width:440px;margin:auto;padding-top:60px;width:100%">
+    <div style="text-align:center;margin-bottom:36px">
+      <div style="font-size:40px;margin-bottom:10px">₿</div>
+      <h1>Collateral<br>Protocol</h1>
+      <p style="color:var(--muted2);margin-top:8px;font-size:13px;font-family:var(--mono)">Multiplayer BTC lending game</p>
+    </div>
 
-    function MiniChart({history, w=220, h=55}) {
-      if (history.length < 2) return null;
-      const mn = Math.min(...history), mx = Math.max(...history), r = mx-mn||1;
-      const pts = history.map((v,i)=>`${(i/(history.length-1))*w},${h-((v-mn)/r)*(h-4)-2}`).join(" ");
-      const c = history[history.length-1] >= history[history.length-2] ? "#00e676" : "#ff1744";
-      return <svg width={w} height={h} style={{display:"block"}}><polyline fill="none" stroke={c} strokeWidth="2" points={pts} strokeLinejoin="round"/></svg>;
-    }
+    <div class="card" style="margin-bottom:12px">
+      <h3 style="margin-bottom:14px">Enter your name</h3>
+      <input class="inp" id="player-name" placeholder="Your name..." maxlength="20" style="margin-bottom:12px"/>
 
-    function Gauge({value, max, label, color}) {
-      const pct = Math.min(value/max,1)*100;
-      return <div style={{marginBottom:6}}>
-        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#8a8a9a",marginBottom:2}}>
-          <span>{label}</span>
-          <span>{typeof value==="number"&&value%1!==0?value.toFixed(2):value}{label.includes("LTV")?"":"%"}</span>
+      <div class="tabs" id="join-tabs" style="margin-bottom:16px">
+        <button class="tab active" onclick="setJoinMode('join')" id="tab-join">Join Game</button>
+        <button class="tab" onclick="setJoinMode('create')" id="tab-create">Create Game</button>
+      </div>
+
+      <div id="join-panel">
+        <input class="inp" id="room-code-input" placeholder="Room code (e.g. BTC42)" maxlength="8" style="margin-bottom:12px;text-transform:uppercase;font-size:18px;text-align:center;letter-spacing:4px"/>
+        <button class="btn btn-gold btn-full btn-lg" onclick="joinRoom()">Join →</button>
+      </div>
+
+      <div id="create-panel" style="display:none">
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <button class="btn btn-surface" style="flex:1" onclick="joinAsTeacher()">
+            <div>🎓</div>
+            <div style="font-size:11px;margin-top:4px">As Teacher</div>
+          </button>
+          <button class="btn btn-surface" style="flex:1" onclick="createRoom()">
+            <div>🎮</div>
+            <div style="font-size:11px;margin-top:4px">New Game Room</div>
+          </button>
         </div>
-        <div style={{height:5,background:"#1a1a2e",borderRadius:3,overflow:"hidden"}}>
-          <div style={{width:`${pct}%`,height:"100%",background:color,borderRadius:3,transition:"width 0.4s"}}/>
+        <p style="font-size:11px;color:var(--muted);text-align:center;font-family:var(--mono)">Teacher controls game pace & events</p>
+      </div>
+
+      <div id="join-error" style="color:var(--red);font-size:12px;margin-top:8px;display:none;text-align:center;font-family:var(--mono)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ SCREEN: LOBBY ══════════════════════════════ -->
+<div class="screen" id="screen-lobby">
+  <div style="max-width:560px;margin:auto;width:100%">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-top:24px">
+      <div>
+        <h2>Game Lobby</h2>
+        <p style="font-size:12px;color:var(--muted2);font-family:var(--mono);margin-top:3px">Waiting for players...</p>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:var(--muted2);margin-bottom:4px">Room Code</div>
+        <div style="font-family:var(--mono);font-size:28px;font-weight:500;color:var(--gold);letter-spacing:4px" id="lobby-room-code">——</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h3>Players (<span id="player-count">0</span>)</h3>
+        <span class="tag">Share the room code above</span>
+      </div>
+      <div id="player-list"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3 style="margin-bottom:12px">Game Settings</h3>
+      <div class="grid2" style="gap:10px">
+        <div>
+          <div style="font-size:11px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono)">Starting BTC per player</div>
+          <input class="inp" id="setting-btc" type="number" value="1.5" step="0.5" min="0.5" max="10"/>
         </div>
-      </div>;
+        <div>
+          <div style="font-size:11px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono)">Starting BTC Price</div>
+          <input class="inp" id="setting-price" type="number" value="65000" step="1000" min="10000"/>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono)">Starting Cash (lenders)</div>
+          <input class="inp" id="setting-cash" type="number" value="50000" step="5000" min="5000"/>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono)">Game Duration (days)</div>
+          <input class="inp" id="setting-days" type="number" value="30" step="5" min="10" max="90"/>
+        </div>
+      </div>
+    </div>
+
+    <div id="teacher-lobby-controls">
+      <button class="btn btn-gold btn-full btn-lg" onclick="startGame()">Start Game →</button>
+      <p style="text-align:center;font-size:11px;color:var(--muted);margin-top:8px;font-family:var(--mono)">Roles assigned randomly when game starts</p>
+    </div>
+    <div id="student-lobby-wait" style="display:none">
+      <div class="card" style="text-align:center;padding:24px;background:rgba(245,200,66,0.05);border-color:rgba(245,200,66,0.2)">
+        <div class="spin" style="width:24px;height:24px;border:2px solid var(--border2);border-top-color:var(--gold);border-radius:50%;margin:0 auto 12px"></div>
+        <p style="color:var(--muted2);font-size:13px;font-family:var(--mono)">Waiting for teacher to start...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ SCREEN: ROLE REVEAL ══════════════════════════════ -->
+<div class="screen" id="screen-role">
+  <div style="max-width:420px;margin:auto;padding-top:80px;width:100%;text-align:center">
+    <div class="role-reveal" id="role-reveal-card">
+      <span class="role-icon" id="role-icon">₿</span>
+      <h2 id="role-title" style="margin-bottom:8px">Your Role</h2>
+      <p id="role-desc" style="color:var(--muted2);font-size:13px;line-height:1.6;font-family:var(--mono);margin-bottom:24px"></p>
+      <div id="role-stats" style="background:var(--surface2);border-radius:12px;padding:16px;text-align:left;margin-bottom:24px"></div>
+      <button class="btn btn-gold btn-full btn-lg" onclick="enterGame()">Enter the Market →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ SCREEN: TEACHER DASHBOARD ══════════════════════════════ -->
+<div class="screen" id="screen-teacher">
+  <!-- Ticker -->
+  <div class="ticker" id="teacher-ticker" style="margin:-24px -24px 20px -24px;padding:8px 24px">
+    <span id="ticker-price">BTC: —</span>
+    <span id="ticker-day">Day: 0</span>
+    <span id="ticker-players">Players: 0</span>
+    <span id="ticker-loans">Active Loans: 0</span>
+    <span id="ticker-volume">Volume: —</span>
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div>
+      <h2>Teacher Dashboard</h2>
+      <p style="font-size:12px;color:var(--muted2);font-family:var(--mono);margin-top:3px">Room: <span id="teacher-room-code" style="color:var(--gold);letter-spacing:2px">——</span></p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span id="teacher-day-badge" class="badge" style="background:rgba(245,200,66,0.15);color:var(--gold);border:1px solid rgba(245,200,66,0.3);font-size:13px">DAY 0</span>
+      <button class="btn btn-gold" onclick="advanceDay()">⏭ Next Day</button>
+      <button class="btn btn-surface btn-sm" onclick="triggerShock('crash')">💥 Price Crash</button>
+      <button class="btn btn-surface btn-sm" onclick="triggerShock('pump')">🚀 Price Pump</button>
+    </div>
+  </div>
+
+  <div class="grid3" style="margin-bottom:16px">
+    <div class="card card-sm">
+      <div class="stat">
+        <div class="stat-label">BTC Price</div>
+        <div class="stat-value" id="t-price" style="color:var(--gold)">—</div>
+        <div class="stat-sub" id="t-price-chg">—</div>
+      </div>
+      <canvas class="minichart" id="t-chart" width="200" height="40" style="margin-top:8px"></canvas>
+    </div>
+    <div class="card card-sm">
+      <div class="stat">
+        <div class="stat-label">Active Loans</div>
+        <div class="stat-value" id="t-loans">—</div>
+        <div class="stat-sub" id="t-loan-vol">Total volume: —</div>
+      </div>
+    </div>
+    <div class="card card-sm">
+      <div class="stat">
+        <div class="stat-label">Defaults / Repaid</div>
+        <div class="stat-value" id="t-defaults" style="color:var(--red)">0 <span style="color:var(--muted2);font-size:16px">/ </span><span id="t-repaid" style="color:var(--green)">0</span></div>
+        <div class="stat-sub" id="t-risk">System health: —</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <!-- Players -->
+    <div class="card" style="max-height:380px;overflow:hidden;display:flex;flex-direction:column">
+      <h3 style="margin-bottom:12px">Players</h3>
+      <div style="overflow-y:auto;flex:1" id="teacher-player-list"></div>
+    </div>
+    <!-- Event Log -->
+    <div class="card" style="max-height:380px;overflow:hidden;display:flex;flex-direction:column">
+      <h3 style="margin-bottom:12px">Event Log</h3>
+      <div style="overflow-y:auto;flex:1" id="teacher-log"></div>
+    </div>
+  </div>
+
+  <!-- All Loans -->
+  <div class="card" style="margin-top:16px">
+    <h3 style="margin-bottom:12px">All Active Loans</h3>
+    <div id="teacher-loans-list" style="font-family:var(--mono);font-size:11px;color:var(--muted2)">No active loans.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ SCREEN: LENDER ══════════════════════════════ -->
+<div class="screen" id="screen-lender">
+  <div class="ticker" id="lender-ticker" style="margin:-24px -24px 20px -24px;padding:8px 24px">
+    <span id="l-ticker-price">BTC: —</span>
+    <span id="l-ticker-day">Day: 0</span>
+    <span id="l-ticker-name">You: —</span>
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:3px">
+        <h2 id="lender-name">Lender</h2>
+        <span class="badge badge-lender">Lender</span>
+      </div>
+      <p style="font-size:12px;color:var(--muted2);font-family:var(--mono)">Set your lending terms and approve loans</p>
+    </div>
+    <div id="lender-day-badge" class="badge" style="font-size:13px;background:rgba(245,200,66,0.15);color:var(--gold);border:1px solid rgba(245,200,66,0.3)">DAY 0</div>
+  </div>
+
+  <div class="grid3" style="margin-bottom:16px">
+    <div class="card card-sm">
+      <div class="stat-label">Cash Available</div>
+      <div class="stat-value mono" id="l-cash" style="color:var(--green)">—</div>
+      <div class="stat-sub" id="l-cash-locked">Locked: —</div>
+    </div>
+    <div class="card card-sm">
+      <div class="stat-label">Total Lent Out</div>
+      <div class="stat-value mono" id="l-lent">—</div>
+      <div class="stat-sub" id="l-interest-earned">Interest earned: —</div>
+    </div>
+    <div class="card card-sm">
+      <div class="stat-label">BTC Price</div>
+      <div class="stat-value mono" id="l-price" style="color:var(--gold)">—</div>
+      <canvas class="minichart" id="l-chart" width="180" height="30" style="margin-top:6px"></canvas>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <!-- Offer Settings -->
+    <div class="card">
+      <h3 style="margin-bottom:14px">My Lending Offer</h3>
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono)">Interest Rate (% APR)</div>
+        <input class="inp" id="l-rate" type="number" value="10" min="1" max="50" step="1"/>
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono)">Max LTV (%)</div>
+        <input class="inp" id="l-ltv" type="number" value="50" min="10" max="90" step="5"/>
+      </div>
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono)">Max Loan Size (USD)</div>
+        <input class="inp" id="l-maxloan" type="number" value="20000" min="1000" step="1000"/>
+      </div>
+      <button class="btn btn-green btn-full" onclick="publishOffer()">Publish Offer</button>
+      <div id="l-offer-status" style="font-size:11px;color:var(--muted2);text-align:center;margin-top:8px;font-family:var(--mono)"></div>
+    </div>
+
+    <!-- Incoming Requests -->
+    <div class="card" style="max-height:360px;overflow:hidden;display:flex;flex-direction:column">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3>Loan Requests (<span id="l-req-count">0</span>)</h3>
+        <span class="tag blink" id="l-req-badge" style="display:none;color:var(--gold)">NEW</span>
+      </div>
+      <div style="overflow-y:auto;flex:1" id="l-requests-list">
+        <p style="font-size:12px;color:var(--muted);text-align:center;padding:20px;font-family:var(--mono)">No requests yet.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Loans I've made -->
+  <div class="card" style="margin-top:16px;max-height:300px;overflow:hidden;display:flex;flex-direction:column">
+    <h3 style="margin-bottom:12px">My Active Loans</h3>
+    <div style="overflow-y:auto;flex:1" id="l-active-loans">
+      <p style="font-size:12px;color:var(--muted);text-align:center;padding:20px;font-family:var(--mono)">No active loans.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ SCREEN: BORROWER ══════════════════════════════ -->
+<div class="screen" id="screen-borrower">
+  <div class="ticker" id="borrower-ticker" style="margin:-24px -24px 20px -24px;padding:8px 24px">
+    <span id="b-ticker-price">BTC: —</span>
+    <span id="b-ticker-day">Day: 0</span>
+    <span id="b-ticker-name">You: —</span>
+  </div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:3px">
+        <h2 id="borrower-name">Borrower</h2>
+        <span class="badge badge-borrower">Borrower</span>
+      </div>
+      <p style="font-size:12px;color:var(--muted2);font-family:var(--mono)">Use BTC as collateral to borrow USD</p>
+    </div>
+    <div id="borrower-day-badge" class="badge" style="font-size:13px;background:rgba(245,200,66,0.15);color:var(--gold);border:1px solid rgba(245,200,66,0.3)">DAY 0</div>
+  </div>
+
+  <div class="grid3" style="margin-bottom:16px">
+    <div class="card card-sm">
+      <div class="stat-label">Free BTC</div>
+      <div class="stat-value mono" id="b-btc" style="color:var(--gold)">—</div>
+      <div class="stat-sub" id="b-btc-usd">≈ —</div>
+    </div>
+    <div class="card card-sm">
+      <div class="stat-label">Cash (USD)</div>
+      <div class="stat-value mono" id="b-cash" style="color:var(--green)">—</div>
+      <div class="stat-sub" id="b-debt">Debt: —</div>
+    </div>
+    <div class="card card-sm">
+      <div class="stat-label">Net Worth</div>
+      <div class="stat-value mono" id="b-networth">—</div>
+      <canvas class="minichart" id="b-chart" width="180" height="30" style="margin-top:6px"></canvas>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <!-- Lender Offers -->
+    <div class="card" style="max-height:380px;overflow:hidden;display:flex;flex-direction:column">
+      <h3 style="margin-bottom:12px">Available Offers (<span id="b-offer-count">0</span>)</h3>
+      <div style="overflow-y:auto;flex:1" id="b-offers-list">
+        <p style="font-size:12px;color:var(--muted);text-align:center;padding:20px;font-family:var(--mono)">No offers available yet.</p>
+      </div>
+    </div>
+
+    <!-- My Loans -->
+    <div class="card" style="max-height:380px;overflow:hidden;display:flex;flex-direction:column">
+      <h3 style="margin-bottom:12px">My Loans (<span id="b-loan-count">0</span>)</h3>
+      <div style="overflow-y:auto;flex:1" id="b-loans-list">
+        <p style="font-size:12px;color:var(--muted);text-align:center;padding:20px;font-family:var(--mono)">No active loans.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ BORROW MODAL ══════════════════════════════ -->
+<div class="modal-bg" id="borrow-modal" style="display:none">
+  <div class="modal">
+    <h2 style="margin-bottom:4px">Request Loan</h2>
+    <p style="font-size:12px;color:var(--muted2);margin-bottom:20px;font-family:var(--mono)" id="bm-lender-info">From: —</p>
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono)">Duration</div>
+      <div style="display:flex;gap:6px" id="bm-dur-btns">
+        <button class="btn btn-surface btn-sm" onclick="setBorrowDur(7)" data-dur="7">7d</button>
+        <button class="btn btn-surface btn-sm" onclick="setBorrowDur(14)" data-dur="14">14d</button>
+        <button class="btn btn-surface btn-sm" onclick="setBorrowDur(30)" data-dur="30">30d</button>
+        <button class="btn btn-surface btn-sm" onclick="setBorrowDur(60)" data-dur="60">60d</button>
+        <button class="btn btn-gold btn-sm" onclick="setBorrowDur(90)" data-dur="90">90d</button>
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono)">Amount (USD)</div>
+      <input class="inp" id="bm-amount" type="number" placeholder="0" oninput="updateBorrowPreview()"/>
+      <div style="display:flex;gap:6px;margin-top:6px" id="bm-pct-btns"></div>
+    </div>
+    <div id="bm-preview" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;font-family:var(--mono);font-size:12px;display:none"></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeBorrowModal()">Cancel</button>
+      <button class="btn btn-gold" style="flex:1" onclick="submitBorrowRequest()">Send Request</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ REPAY MODAL ══════════════════════════════ -->
+<div class="modal-bg" id="repay-modal" style="display:none">
+  <div class="modal">
+    <h2 style="margin-bottom:4px">Repay Loan</h2>
+    <p style="font-size:12px;color:var(--muted2);margin-bottom:20px;font-family:var(--mono)" id="rm-info">Loan #—</p>
+    <div id="rm-details" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;font-family:var(--mono);font-size:12px"></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeRepayModal()">Cancel</button>
+      <button class="btn btn-green" style="flex:1" onclick="confirmRepay()">Repay Now</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<script>
+// ══════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════
+let db = null;
+let roomCode = null;
+let myId = null;
+let myRole = null; // 'teacher' | 'lender' | 'borrower'
+let myName = '';
+let isTeacher = false;
+let joinMode = 'join';
+let selectedOffer = null;
+let borrowDuration = 30;
+let repayLoanId = null;
+let priceHistory = [65000];
+let borrowerNWHistory = [];
+let gameSettings = {};
+let gameData = {};
+let offersData = {};
+let loansData = {};
+let playersData = {};
+
+// ══════════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════════
+const fUSD = n => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(n);
+const fBTC = n => (+n).toFixed(4) + ' ₿';
+const fPct = n => (+n).toFixed(1) + '%';
+const uid = () => Math.random().toString(36).substr(2,9);
+const roomId = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let r = '';
+  for(let i=0;i<5;i++) r += chars[Math.floor(Math.random()*chars.length)];
+  return r;
+};
+function owed(loan, day) {
+  const d = Math.max(day - loan.originDay, 1);
+  const i = loan.amount * (loan.rate/100) * (d/365);
+  return { interest: i, total: loan.amount + i };
+}
+function el(id) { return document.getElementById(id); }
+function show(id) { el(id).style.display = ''; }
+function hide(id) { el(id).style.display = 'none'; }
+
+// ══════════════════════════════════════════════════════
+// FIREBASE INIT — config hardcoded, auto-connects on load
+// ══════════════════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBcBo3g8z5_SgIGMPtgsfD5SP2ukvTKbx8",
+  authDomain: "uplend-6480b.firebaseapp.com",
+  databaseURL: "https://uplend-6480b-default-rtdb.firebaseio.com",
+  projectId: "uplend-6480b",
+  storageBucket: "uplend-6480b.firebasestorage.app",
+  messagingSenderId: "747535784160",
+  appId: "1:747535784160:web:867d6e406552a488725885"
+};
+
+function initFirebase() {
+  if (typeof firebase === 'undefined') {
+    alert('Firebase failed to load. Check your internet connection and reload the page.');
+    return;
+  }
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    db.ref('.info/connected').once('value').then(() => {
+      document.getElementById('loading-overlay').style.display = 'none';
+      showScreen('screen-join');
+    }).catch(e => {
+      document.getElementById('loading-msg').textContent = 'Connection failed: ' + e.message;
+      document.getElementById('loading-msg').style.color = '#ff3b5c';
+    });
+  } catch(e) {
+    alert('Firebase error: ' + e.message);
+  }
+}
+
+// Auto-init on page load
+window.addEventListener('load', initFirebase);
+
+// ══════════════════════════════════════════════════════
+// SCREENS
+// ══════════════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  el(id).classList.add('active');
+}
+
+// ══════════════════════════════════════════════════════
+// JOIN / CREATE
+// ══════════════════════════════════════════════════════
+function setJoinMode(mode) {
+  joinMode = mode;
+  el('tab-join').classList.toggle('active', mode==='join');
+  el('tab-create').classList.toggle('active', mode==='create');
+  el('join-panel').style.display = mode==='join' ? '' : 'none';
+  el('create-panel').style.display = mode==='create' ? '' : 'none';
+}
+
+function getPlayerName() {
+  const n = el('player-name').value.trim();
+  if (!n) { showJoinError('Enter your name first.'); return null; }
+  return n;
+}
+
+function showJoinError(msg) {
+  el('join-error').textContent = msg;
+  show('join-error');
+  setTimeout(() => hide('join-error'), 3000);
+}
+
+async function joinRoom() {
+  const name = getPlayerName(); if (!name) return;
+  const code = el('room-code-input').value.trim().toUpperCase();
+  if (!code) { showJoinError('Enter a room code.'); return; }
+  const snap = await db.ref(`rooms/${code}`).once('value');
+  if (!snap.exists()) { showJoinError('Room not found.'); return; }
+  const room = snap.val();
+  if (room.status === 'playing') { showJoinError('Game already started.'); return; }
+  myName = name; roomCode = code; myId = uid(); isTeacher = false;
+  await db.ref(`rooms/${code}/players/${myId}`).set({ name, role: 'pending', online: true, joinedAt: Date.now() });
+  listenLobby();
+  showScreen('screen-lobby');
+  el('lobby-room-code').textContent = code;
+  el('student-lobby-wait').style.display = '';
+  el('teacher-lobby-controls').style.display = 'none';
+}
+
+async function createRoom() {
+  const name = getPlayerName(); if (!name) return;
+  myName = name; roomCode = roomId(); myId = uid(); isTeacher = false;
+  await db.ref(`rooms/${roomCode}`).set({
+    status: 'lobby', createdAt: Date.now(),
+    settings: { btcPerPlayer:1.5, startPrice:65000, lenderCash:50000, gameDays:30 },
+    game: { day:0, price:65000, priceHistory:[65000], totalDefaults:0, totalRepaid:0, log:[] }
+  });
+  await db.ref(`rooms/${roomCode}/players/${myId}`).set({ name, role: 'pending', online: true, joinedAt: Date.now() });
+  listenLobby();
+  showScreen('screen-lobby');
+  el('lobby-room-code').textContent = roomCode;
+  el('teacher-lobby-controls').style.display = 'none';
+  el('student-lobby-wait').style.display = '';
+}
+
+async function joinAsTeacher() {
+  const name = getPlayerName() || 'Teacher'; 
+  myName = name; roomCode = roomId(); myId = 'teacher'; isTeacher = true;
+  await db.ref(`rooms/${roomCode}`).set({
+    status: 'lobby', createdAt: Date.now(),
+    settings: { btcPerPlayer:1.5, startPrice:65000, lenderCash:50000, gameDays:30 },
+    game: { day:0, price:65000, priceHistory:[65000], totalDefaults:0, totalRepaid:0, log:[] }
+  });
+  await db.ref(`rooms/${roomCode}/players/teacher`).set({ name, role: 'teacher', online: true, joinedAt: Date.now() });
+  listenLobby();
+  showScreen('screen-lobby');
+  el('lobby-room-code').textContent = roomCode;
+  el('teacher-lobby-controls').style.display = '';
+  el('student-lobby-wait').style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════
+// LOBBY
+// ══════════════════════════════════════════════════════
+function listenLobby() {
+  db.ref(`rooms/${roomCode}/players`).on('value', snap => {
+    playersData = snap.val() || {};
+    renderLobbyPlayers();
+  });
+  db.ref(`rooms/${roomCode}/status`).on('value', snap => {
+    if (snap.val() === 'playing') {
+      loadMyRole();
     }
+  });
+}
 
-    function App() {
-      const [day, setDay] = useState(0);
-      const [price, setPrice] = useState(INIT_BTC_PRICE);
-      const [hist, setHist] = useState([INIT_BTC_PRICE]);
-      const [btc, setBtc] = useState(INIT_BTC);
-      const [cash, setCash] = useState(0);
-      const [ltv, setLtv] = useState(INIT_LTV);
-      const [rate, setRate] = useState(INIT_INTEREST);
-      const [ltvStep, setLtvStep] = useState(INIT_LTV_STEP);
-      const [intStep, setIntStep] = useState(INIT_INT_STEP);
-      const [loans, setLoans] = useState([]);
-      const [nRepaid, setNRepaid] = useState(0);
-      const [nDefault, setNDefault] = useState(0);
-      const [gLtvStep, setGLtvStep] = useState(INIT_LTV_STEP);
-      const [gIntStep, setGIntStep] = useState(INIT_INT_STEP);
-      const [bots, setBots] = useState(()=> Array.from({length:N_BORROWERS},(_,i)=>genBorrower(i+1,INIT_LTV_STEP,INIT_INT_STEP)));
-      const [log, setLog] = useState([{day:0,msg:"Welcome. 2 BTC endowed. Borrow, trade, leverage.",type:"info"}]);
-      const [borrowAmt, setBorrowAmt] = useState("");
-      const [borrowDur, setBorrowDur] = useState(30);
-      const [showBorrow, setShowBorrow] = useState(false);
-      const [showTrade, setShowTrade] = useState(false);
-      const [tradeAmt, setTradeAmt] = useState("");
-      const [tradeSide, setTradeSide] = useState("buy");
-      const [liqConfirm, setLiqConfirm] = useState(null);
-      const logRef = useRef(null);
+function renderLobbyPlayers() {
+  const players = Object.entries(playersData);
+  el('player-count').textContent = players.length;
+  el('player-list').innerHTML = players.map(([id, p]) => `
+    <div class="player-row">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="dot dot-green"></span>
+        <span style="font-weight:600">${p.name}</span>
+        ${id === myId ? '<span class="tag">You</span>' : ''}
+      </div>
+      <span class="badge ${p.role==='teacher'?'badge-teacher':p.role==='lender'?'badge-lender':p.role==='borrower'?'badge-borrower':''}">${p.role==='pending'?'Waiting...':p.role}</span>
+    </div>
+  `).join('');
+}
 
-      useEffect(()=>{ if(logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; },[log]);
+async function startGame() {
+  const settings = {
+    btcPerPlayer: parseFloat(el('setting-btc').value) || 1.5,
+    startPrice: parseFloat(el('setting-price').value) || 65000,
+    lenderCash: parseFloat(el('setting-cash').value) || 50000,
+    gameDays: parseInt(el('setting-days').value) || 30
+  };
+  await db.ref(`rooms/${roomCode}/settings`).set(settings);
 
-      const totalCollateral = loans.reduce((s,l)=>s+l.collateralBtc, 0);
-      const totalDebt = loans.reduce((s,l)=>s+owed(l,day).total, 0);
-      const maxBorrow = btc * price * ltv;
-      const netWorth = (btc + totalCollateral) * price + cash - totalDebt;
-
-      const addLog = useCallback((entries)=>{
-        setLog(prev=>[...prev.slice(-100),...(Array.isArray(entries)?entries:[entries])]);
-      },[]);
-
-      function handleBorrow() {
-        const amt = parseFloat(borrowAmt);
-        if (isNaN(amt)||amt<=0||amt>maxBorrow) return;
-        const coll = amt / (price * ltv);
-        setBtc(p=>p-coll);
-        setCash(p=>p+amt);
-        const newLoan = { id: loanIdCounter++, amount: amt, collateralBtc: coll, interest: rate, originDay: day, ltv, duration: borrowDur };
-        setLoans(p=>[...p, newLoan]);
-        setShowBorrow(false); setBorrowAmt("");
-        addLog({day, msg:`Loan #${newLoan.id}: Borrowed ${fUSD(amt)} against ${fBTC(coll)} · ${rate}% · ${borrowDur}d · LTV ${(ltv*100).toFixed(0)}%`, type:"borrow"});
-      }
-
-      function handleRepay(loanId) {
-        const loan = loans.find(l=>l.id===loanId);
-        if (!loan) return;
-        const {total: tot, interest: intAmt} = owed(loan, day);
-        if (cash >= tot) {
-          setCash(p=>p-tot);
-          setBtc(p=>p+loan.collateralBtc);
-          setLoans(p=>p.filter(l=>l.id!==loanId));
-          const nLtv = Math.min(ltv+ltvStep,1); const nR = rate+intStep;
-          setLtv(nLtv); setRate(nR); setNRepaid(p=>p+1);
-          addLog({day, msg:`Loan #${loan.id} repaid ${fUSD(tot)} (${fUSD(intAmt)} int). LTV→${(nLtv*100).toFixed(0)}% Rate→${nR}%`, type:"repay"});
-        } else {
-          const short = tot - cash;
-          const btcNeed = short / price;
-          const avail = btc + loan.collateralBtc;
-          if (btcNeed <= avail) {
-            setLiqConfirm({loanId, tot, short, btcNeed});
-          } else {
-            addLog({day, msg:`Loan #${loan.id}: Can't repay ${fUSD(tot)}. Not enough assets.`, type:"warn"});
-          }
-        }
-      }
-
-      function confirmLiqRepay() {
-        if (!liqConfirm) return;
-        const loan = loans.find(l=>l.id===liqConfirm.loanId);
-        if (!loan) { setLiqConfirm(null); return; }
-        const {total: tot} = owed(loan, day);
-        const short = tot - cash;
-        const btcSold = short / price;
-        const fromFree = Math.min(btcSold, btc);
-        const fromColl = btcSold - fromFree;
-        const collReturn = loan.collateralBtc - fromColl;
-        setCash(0);
-        setBtc(p=>p - fromFree + collReturn);
-        setLoans(p=>p.filter(l=>l.id!==loan.id));
-        const nLtv = Math.min(ltv+ltvStep,1); const nR = rate+intStep;
-        setLtv(nLtv); setRate(nR); setNRepaid(p=>p+1);
-        addLog({day, msg:`Loan #${loan.id} repaid ${fUSD(tot)}. Sold ${fBTC(btcSold)} BTC. LTV→${(nLtv*100).toFixed(0)}%`, type:"repay"});
-        setLiqConfirm(null);
-      }
-
-      function handleTrade() {
-        const amt = parseFloat(tradeAmt);
-        if (isNaN(amt)||amt<=0) return;
-        if (tradeSide === "buy") {
-          const cost = amt * price;
-          if (cost > cash) { addLog({day, msg:`Not enough cash to buy ${fBTC(amt)}.`, type:"warn"}); return; }
-          setCash(p=>p-cost); setBtc(p=>p+amt);
-          addLog({day, msg:`Bought ${fBTC(amt)} for ${fUSD(cost)} @ ${fUSD(price)}`, type:"borrow"});
-        } else {
-          if (amt > btc) { addLog({day, msg:`Not enough free BTC to sell ${fBTC(amt)}.`, type:"warn"}); return; }
-          const proceeds = amt * price;
-          setBtc(p=>p-amt); setCash(p=>p+proceeds);
-          addLog({day, msg:`Sold ${fBTC(amt)} for ${fUSD(proceeds)} @ ${fUSD(price)}`, type:"repay"});
-        }
-        setShowTrade(false); setTradeAmt("");
-      }
-
-      function nextDay() {
-        const nd = day+1;
-        setDay(nd);
-        const np = simPrice(price);
-        setPrice(np); setHist(p=>[...p.slice(-60),np]);
-        let lg = [];
-        let gls = gLtvStep, gis = gIntStep;
-        const dir = np>=price?"↑":"↓";
-        lg.push({day:nd, msg:`Day ${nd}: BTC ${fUSD(np)} (${dir} ${(((np-price)/price)*100).toFixed(2)}%)`, type:np>=price?"up":"down"});
-
-        let updatedLoans = [...loans];
-        let curBtc = btc;
-        let curCash = cash;
-        let curLtv = ltv;
-        let curRate = rate;
-        let curLs = ltvStep;
-        let curIs = intStep;
-        let repaidInc = 0;
-        let defaultInc = 0;
-        let toRemove = new Set();
-
-        for (const loan of updatedLoans) {
-          if (toRemove.has(loan.id)) continue;
-          const matDay = loan.originDay + loan.duration;
-
-          if (nd >= matDay) {
-            const {total: tot, interest: intAmt} = owed(loan, nd);
-            if (curCash >= tot) {
-              curCash -= tot;
-              curBtc += loan.collateralBtc;
-              const nL = Math.min(curLtv+curLs,1); const nR = curRate+curIs;
-              curLtv = nL; curRate = nR; repaidInc++;
-              lg.push({day:nd, msg:`MATURITY Loan #${loan.id}: Repaid ${fUSD(tot)} with cash. LTV→${(nL*100).toFixed(0)}%`, type:"repay"});
-              toRemove.add(loan.id);
-            } else {
-              const short = tot - curCash;
-              const btcNeed = short / np;
-              const avail = curBtc + loan.collateralBtc;
-              if (btcNeed <= avail) {
-                const fromFree = Math.min(btcNeed, curBtc);
-                const fromColl = btcNeed - fromFree;
-                curCash = 0;
-                curBtc = curBtc - fromFree + (loan.collateralBtc - fromColl);
-                const nL = Math.min(curLtv+curLs,1); const nR = curRate+curIs;
-                curLtv = nL; curRate = nR; repaidInc++;
-                lg.push({day:nd, msg:`MATURITY Loan #${loan.id}: Repaid ${fUSD(tot)}. Sold ${fBTC(btcNeed)} BTC. LTV→${(nL*100).toFixed(0)}%`, type:"repay"});
-                toRemove.add(loan.id);
-              } else {
-                lg.push({day:nd, msg:`DEFAULT Loan #${loan.id} on maturity. Collateral (${fBTC(loan.collateralBtc)}) confiscated.`, type:"default"});
-                curLtv = INIT_LTV; curRate = INIT_INTEREST; defaultInc++;
-                gls = Math.max(gls-0.01,0.01); gis = 2;
-                curLs = gls; curIs = gis;
-                toRemove.add(loan.id);
-              }
-            }
-          } else {
-            const curRatio = loan.amount / (loan.collateralBtc * np);
-            if (curRatio > loan.ltv && curBtc > 0.00001) {
-              const reqColl = loan.amount / (loan.ltv * np);
-              const deficit = reqColl - loan.collateralBtc;
-              if (deficit > 0.00001) {
-                const toAdd = Math.min(deficit, curBtc);
-                loan.collateralBtc += toAdd;
-                curBtc -= toAdd;
-                lg.push({day:nd, msg:`LTV MAINT Loan #${loan.id}: +${fBTC(toAdd)} collateral`, type:"warn"});
-              }
-            }
-            const cv = loan.collateralBtc * np;
-            if (cv < loan.amount) {
-              lg.push({day:nd, msg:`DEFAULT Loan #${loan.id}. Collateral ${fUSD(cv)} < ${fUSD(loan.amount)}. Confiscated.`, type:"default"});
-              curLtv = INIT_LTV; curRate = INIT_INTEREST; defaultInc++;
-              gls = Math.max(gls-0.01,0.01); gis = 2;
-              curLs = gls; curIs = gis;
-              toRemove.add(loan.id);
-            }
-          }
-        }
-
-        setBtc(curBtc); setCash(curCash); setLtv(curLtv); setRate(curRate);
-        setLtvStep(curLs); setIntStep(curIs);
-        setNRepaid(p=>p+repaidInc); setNDefault(p=>p+defaultInc);
-        setLoans(updatedLoans.filter(l=>!toRemove.has(l.id)));
-
-        setBots(prev=>prev.map(b=>{
-          let u={...b};
-          if(u.hasLoan){
-            const cv=u.collateral*np;
-            const mat=u.loanDay+u.loanDur;
-            if(cv<u.loanAmt){
-              lg.push({day:nd,msg:`${u.name} defaulted!`,type:"other-default"});
-              u.hasLoan=false;u.loanAmt=0;u.collateral=0;u.ltv=INIT_LTV;u.interest=INIT_INTEREST;u.defaults++;
-              gls=Math.max(gls-0.01,0.01);gis=2;u.ltvStep=gls;u.intStep=gis;
-            } else if(nd>=mat||Math.random()<0.12){
-              const dh=Math.max(nd-u.loanDay,1);
-              u.cash-=u.loanAmt+u.loanAmt*(u.interest/100)*(dh/365);
-              u.btc+=u.collateral;u.hasLoan=false;u.collateral=0;u.repaid++;
-              const nL=Math.min(u.ltv+u.ltvStep,1);u.ltv=nL;u.interest+=u.intStep;u.loanAmt=0;
-              lg.push({day:nd,msg:`${u.name} repaid. LTV→${(nL*100).toFixed(0)}%`,type:"other-repay"});
-            }
-          } else if(u.btc>0.01&&Math.random()<0.2){
-            const dur=[7,14,30,60,90][Math.floor(Math.random()*5)];
-            const la=u.btc*np*u.ltv*(0.3+Math.random()*0.7);
-            const co=la/(np*u.ltv);
-            if(co<=u.btc){
-              u.hasLoan=true;u.loanAmt=la;u.collateral=co;u.btc-=co;u.cash+=la;u.loanDay=nd;u.loanDur=dur;
-              lg.push({day:nd,msg:`${u.name} borrowed ${fUSD(la)} ${dur}d`,type:"other-borrow"});
-            }
-          }
-          return u;
-        }));
-
-        setGLtvStep(gls); setGIntStep(gis);
-        addLog(lg);
-      }
-
-      const tc = {
-        info:"#8a8a9a",borrow:"#ffd740",repay:"#00e676",warn:"#ff9100",default:"#ff1744",
-        up:"#00e676",down:"#ff1744","other-default":"#ff6e40","other-borrow":"#7c7c8a","other-repay":"#5c5c6a"
+  // Assign roles
+  const players = Object.entries(playersData).filter(([id]) => id !== 'teacher');
+  const shuffled = players.sort(() => Math.random() - 0.5);
+  const half = Math.ceil(shuffled.length / 2);
+  
+  const updates = {};
+  updates[`rooms/${roomCode}/status`] = 'playing';
+  
+  shuffled.forEach(([id, p], i) => {
+    const role = i < half ? 'lender' : 'borrower';
+    updates[`rooms/${roomCode}/players/${id}/role`] = role;
+    if (role === 'lender') {
+      updates[`rooms/${roomCode}/wallets/${id}`] = {
+        cash: settings.lenderCash, btc: 0, role: 'lender', name: p.name,
+        totalLent: 0, totalInterest: 0, defaults: 0
       };
-      const inp = {width:"100%",background:"#0a0a14",border:"1px solid #2a2a4a",borderRadius:8,padding:"10px 12px",color:"#e0e0e8",fontSize:15,fontFamily:"inherit",outline:"none",boxSizing:"border-box"};
+    } else {
+      updates[`rooms/${roomCode}/wallets/${id}`] = {
+        cash: 0, btc: settings.btcPerPlayer, role: 'borrower', name: p.name,
+        totalBorrowed: 0, totalRepaid: 0, defaults: 0
+      };
+    }
+  });
 
-      return (
-        <div style={{minHeight:"100vh",background:"#0a0a14",color:"#e0e0e8",fontFamily:"'JetBrains Mono','Fira Code','SF Mono',monospace",padding:16,boxSizing:"border-box"}}>
-          <style>{`
-            @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
-            *{box-sizing:border-box;margin:0;padding:0}
-            ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0a0a14}::-webkit-scrollbar-thumb{background:#2a2a3e;border-radius:2px}
-            @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
-            @keyframes slideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-            @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-            .cd{background:#12122a;border:1px solid #1e1e3a;border-radius:10px;padding:16px}
-            .bt{border:none;cursor:pointer;border-radius:7px;font-family:inherit;font-weight:600;transition:all .2s}
-            .bt:hover{transform:translateY(-1px);filter:brightness(1.1)}.bt:active{transform:translateY(0)}
-            .gw{box-shadow:0 0 24px rgba(255,215,64,.07)}
-            .mo{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:100;animation:fadeIn .2s}
-            .md{background:#12122a;border:1px solid #2a2a4a;border-radius:14px;padding:24px;width:400px;max-width:92vw;animation:slideIn .3s}
-            .br{display:grid;grid-template-columns:1fr 70px 80px 50px 40px 50px;gap:5px;align-items:center;padding:5px 0;border-bottom:1px solid #1a1a2e;font-size:10px}
-            .br:last-child{border-bottom:none}
-            .lr{background:#0e0e20;border:1px solid #1a1a2e;border-radius:8px;padding:10px;margin-bottom:8px;animation:slideIn .3s}
-          `}</style>
+  await db.ref().update(updates);
+}
 
-          {/* Header */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:10}}>
-            <div>
-              <h1 style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:20,fontWeight:700,color:"#ffd740",letterSpacing:"-0.5px"}}>₿ COLLATERAL PROTOCOL</h1>
-              <p style={{fontSize:10,color:"#5a5a6a",marginTop:1}}>Multi-Loan BTC Lending & Trading</p>
-            </div>
-            <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <div style={{background:"#1a1a2e",borderRadius:7,padding:"6px 12px",fontSize:11}}>
-                <span style={{color:"#5a5a6a"}}>DAY </span><span style={{color:"#ffd740",fontWeight:700,fontSize:15}}>{day}</span>
-              </div>
-              <button className="bt" onClick={()=>setShowTrade(true)} style={{background:"#1a1a2e",border:"1px solid #2a2a4a",color:"#00e676",padding:"8px 16px",fontSize:12}}>TRADE</button>
-              <button className="bt" onClick={nextDay} style={{background:"linear-gradient(135deg,#ffd740,#ffab00)",color:"#0a0a14",padding:"8px 20px",fontSize:12,letterSpacing:.5}}>NEXT DAY →</button>
-            </div>
-          </div>
+async function loadMyRole() {
+  const snap = await db.ref(`rooms/${roomCode}/players/${myId}`).once('value');
+  const player = snap.val();
+  if (!player) return;
+  myRole = player.role;
 
-          {/* Top row */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}}>
-            <div className="cd gw">
-              <div style={{fontSize:9,color:"#5a5a6a",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Bitcoin Price</div>
-              <div style={{fontSize:26,fontWeight:700,color:hist.length>1&&price>=hist[hist.length-2]?"#00e676":"#ff1744"}}>{fUSD(price)}</div>
-              <div style={{marginTop:10}}><MiniChart history={hist}/></div>
-              <div style={{display:"flex",gap:14,marginTop:8,fontSize:9,color:"#5a5a6a"}}>
-                <span>H: {fUSD(Math.max(...hist))}</span><span>L: {fUSD(Math.min(...hist))}</span>
-              </div>
-            </div>
+  const settingsSnap = await db.ref(`rooms/${roomCode}/settings`).once('value');
+  gameSettings = settingsSnap.val() || {};
 
-            <div className="cd">
-              <div style={{fontSize:9,color:"#5a5a6a",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Portfolio</div>
-              <div style={{fontSize:22,fontWeight:700}}>{fUSD(netWorth)}</div>
-              <div style={{fontSize:9,color:"#5a5a6a",marginBottom:10}}>Net Worth</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <div style={{background:"#0e0e20",borderRadius:7,padding:8}}>
-                  <div style={{fontSize:9,color:"#ffd740"}}>Free BTC</div>
-                  <div style={{fontSize:13,fontWeight:600,marginTop:1}}>{fBTC(btc)}</div>
-                  <div style={{fontSize:9,color:"#5a5a6a"}}>{fUSD(btc*price)}</div>
-                </div>
-                <div style={{background:"#0e0e20",borderRadius:7,padding:8}}>
-                  <div style={{fontSize:9,color:"#00e676"}}>Cash</div>
-                  <div style={{fontSize:13,fontWeight:600,marginTop:1}}>{fUSD(cash)}</div>
-                </div>
-              </div>
-              {totalCollateral > 0 && <div style={{background:"#1a0a0a",border:"1px solid #3a1a1a",borderRadius:7,padding:8,marginTop:8}}>
-                <div style={{fontSize:9,color:"#ff6e40"}}>Locked Collateral</div>
-                <div style={{fontSize:12,fontWeight:600,marginTop:1}}>{fBTC(totalCollateral)} <span style={{color:"#5a5a6a",fontWeight:400}}>({fUSD(totalCollateral*price)})</span></div>
-              </div>}
-              {totalDebt > 0 && <div style={{marginTop:6,fontSize:10,color:"#ff6e40"}}>Total Debt: {fUSD(totalDebt)}</div>}
-            </div>
+  showRoleReveal(myRole);
+}
 
-            <div className="cd">
-              <div style={{fontSize:9,color:"#5a5a6a",textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Borrowing Power</div>
-              <Gauge value={ltv} max={1} label={`LTV: ${(ltv*100).toFixed(0)}%`} color="#ffd740"/>
-              <Gauge value={rate} max={50} label={`Rate: ${rate}%`} color="#ff6e40"/>
-              <div style={{display:"flex",gap:8,fontSize:9,color:"#5a5a6a",marginBottom:8}}>
-                <span>Repaid: {nRepaid}</span><span>·</span><span>Defaults: {nDefault}</span><span>·</span><span>Active: {loans.length}</span>
-              </div>
-              <div style={{fontSize:10,color:"#5a5a6a",marginBottom:6}}>Max new loan: {fUSD(maxBorrow)}</div>
-              <button className="bt" onClick={()=>setShowBorrow(true)} disabled={maxBorrow<=0} style={{
-                width:"100%",background:maxBorrow>0?"#ffd740":"#2a2a3e",color:maxBorrow>0?"#0a0a14":"#5a5a6a",
-                padding:"9px",fontSize:11,cursor:maxBorrow>0?"pointer":"not-allowed"
-              }}>+ NEW LOAN</button>
-            </div>
-          </div>
+// ══════════════════════════════════════════════════════
+// ROLE REVEAL
+// ══════════════════════════════════════════════════════
+function showRoleReveal(role) {
+  showScreen('screen-role');
+  if (role === 'teacher') { enterGame(); return; }
 
-          {/* Active Loans */}
-          {loans.length > 0 && (
-            <div className="cd" style={{marginBottom:12}}>
-              <div style={{fontSize:9,color:"#5a5a6a",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>
-                Active Loans ({loans.length})
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:8}}>
-                {loans.map(loan => {
-                  const {interest: intAcc, total: tot} = owed(loan, day);
-                  const drem = Math.max((loan.originDay+loan.duration)-day, 0);
-                  const curRatio = loan.amount / (loan.collateralBtc * price);
-                  const health = (loan.collateralBtc * price) / loan.amount;
-                  return (
-                    <div key={loan.id} className="lr">
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                        <span style={{fontSize:12,fontWeight:700,color:"#ff6e40"}}>Loan #{loan.id}</span>
-                        <span style={{
-                          fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:4,
-                          background:drem<=3?"#3a1010":"#1a1a2e",
-                          color:drem<=3?"#ff1744":drem<=7?"#ffd740":"#8a8a9a",
-                          animation:drem<=3?"pulse 1.5s infinite":"none"
-                        }}>{drem}d left</span>
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,fontSize:10,marginBottom:6}}>
-                        <div><span style={{color:"#5a5a6a"}}>Principal: </span>{fUSD(loan.amount)}</div>
-                        <div><span style={{color:"#5a5a6a"}}>Owed: </span><span style={{color:"#ff9100"}}>{fUSD(tot)}</span></div>
-                        <div><span style={{color:"#5a5a6a"}}>Collateral: </span>{fBTC(loan.collateralBtc)}</div>
-                        <div><span style={{color:"#5a5a6a"}}>Interest: </span>{fUSD(intAcc)}</div>
-                      </div>
-                      <Gauge value={curRatio} max={1} label={`LTV ${(curRatio*100).toFixed(1)}%`}
-                        color={curRatio>0.9?"#ff1744":curRatio>0.7?"#ffd740":"#00e676"}/>
-                      <div style={{display:"flex",gap:6,marginTop:4}}>
-                        <div style={{flex:1,fontSize:9,color:health>1.5?"#00e676":health>1.1?"#ffd740":"#ff1744"}}>
-                          Health: {health.toFixed(2)}x
-                        </div>
-                        <button className="bt" onClick={()=>handleRepay(loan.id)} style={{
-                          background:"#00e676",color:"#0a0a14",padding:"5px 14px",fontSize:10
-                        }}>REPAY</button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+  if (role === 'lender') {
+    el('role-icon').textContent = '🏦';
+    el('role-title').textContent = 'You are a Lender';
+    el('role-reveal-card').style.borderColor = 'var(--green)';
+    el('role-desc').textContent = 'Set your interest rates and LTV limits. Review borrower requests. Earn interest — but beware of defaults if BTC crashes.';
+    el('role-stats').innerHTML = `
+      <div class="grid2">
+        <div><div class="stat-label">Starting Cash</div><div style="font-family:var(--mono);color:var(--green)">${fUSD(gameSettings.lenderCash||50000)}</div></div>
+        <div><div class="stat-label">Starting BTC</div><div style="font-family:var(--mono);color:var(--gold)">0 ₿</div></div>
+      </div>`;
+  } else {
+    el('role-icon').textContent = '📈';
+    el('role-title').textContent = 'You are a Borrower';
+    el('role-reveal-card').style.borderColor = 'var(--gold)';
+    el('role-desc').textContent = 'Use your BTC as collateral. Browse lender offers and request loans. Repay before maturity — or face liquidation.';
+    el('role-stats').innerHTML = `
+      <div class="grid2">
+        <div><div class="stat-label">Starting BTC</div><div style="font-family:var(--mono);color:var(--gold)">${fBTC(gameSettings.btcPerPlayer||1.5)}</div></div>
+        <div><div class="stat-label">Starting Cash</div><div style="font-family:var(--mono);color:var(--green)">$0</div></div>
+      </div>`;
+  }
+}
 
-          {/* Bottom: Participants | Log */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <div className="cd" style={{maxHeight:300,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <div style={{fontSize:9,color:"#5a5a6a",textTransform:"uppercase",letterSpacing:1}}>Market</div>
-                <div style={{fontSize:9,color:"#5a5a6a"}}>LTV↑{(gLtvStep*100).toFixed(0)}% · Int↑{gIntStep}%</div>
-              </div>
-              <div className="br" style={{color:"#5a5a6a",fontSize:9,fontWeight:600,borderBottom:"1px solid #2a2a3e"}}>
-                <span>Name</span><span>BTC</span><span>Loan</span><span>LTV</span><span>Def</span><span>Days</span>
-              </div>
-              <div style={{overflowY:"auto",flex:1}}>
-                {bots.map(b=>(
-                  <div key={b.id} className="br">
-                    <span style={{color:b.hasLoan?"#ff6e40":"#5a5a6a"}}>{b.hasLoan?"●":"○"} {b.name}</span>
-                    <span>{b.btc.toFixed(2)}₿</span>
-                    <span style={{color:b.hasLoan?"#ff6e40":"#3a3a4a"}}>{b.hasLoan?fUSD(b.loanAmt):"—"}</span>
-                    <span>{(b.ltv*100).toFixed(0)}%</span>
-                    <span style={{color:b.defaults>0?"#ff1744":"#3a3a4a"}}>{b.defaults}</span>
-                    <span style={{color:"#5a5a6a"}}>{b.hasLoan?`${Math.max((b.loanDay+b.loanDur)-day,0)}d`:"—"}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+function enterGame() {
+  if (isTeacher || myRole === 'teacher') {
+    showScreen('screen-teacher');
+    initTeacherDashboard();
+  } else if (myRole === 'lender') {
+    showScreen('screen-lender');
+    initLenderDashboard();
+  } else {
+    showScreen('screen-borrower');
+    initBorrowerDashboard();
+  }
+}
 
-            <div className="cd" style={{maxHeight:300,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-              <div style={{fontSize:9,color:"#5a5a6a",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Event Log</div>
-              <div ref={logRef} style={{overflowY:"auto",flex:1}}>
-                {log.map((e,i)=>(
-                  <div key={i} style={{
-                    fontSize:10,color:tc[e.type]||"#8a8a9a",padding:"2px 0",
-                    borderLeft:e.type==="default"?"2px solid #ff1744":e.type==="repay"?"2px solid #00e676":e.type==="warn"?"2px solid #ff9100":"2px solid transparent",
-                    paddingLeft:7,animation:"slideIn .3s"
-                  }}>{e.msg}</div>
-                ))}
-              </div>
-            </div>
-          </div>
+// ══════════════════════════════════════════════════════
+// TEACHER DASHBOARD
+// ══════════════════════════════════════════════════════
+function initTeacherDashboard() {
+  el('teacher-room-code').textContent = roomCode;
 
-          {/* Footer */}
-          <div style={{display:"flex",gap:16,justifyContent:"center",marginTop:12,fontSize:9,color:"#3a3a4a",flexWrap:"wrap"}}>
-            <span>Repay → LTV+{(gLtvStep*100).toFixed(0)}% Rate+{gIntStep}%</span><span>·</span>
-            <span>Default → Reset + global LTV step−1%</span><span>·</span>
-            <span>Auto LTV maintenance + maturity repay</span><span>·</span>
-            <span>Buy BTC with cash → use as collateral → borrow more</span>
-          </div>
+  db.ref(`rooms/${roomCode}/game`).on('value', snap => {
+    gameData = snap.val() || {};
+    renderTeacherDashboard();
+  });
+  db.ref(`rooms/${roomCode}/players`).on('value', snap => {
+    playersData = snap.val() || {};
+    renderTeacherPlayers();
+  });
+  db.ref(`rooms/${roomCode}/loans`).on('value', snap => {
+    loansData = snap.val() || {};
+    renderTeacherLoans();
+  });
+}
 
-          {/* BORROW MODAL */}
-          {showBorrow && (
-            <div className="mo" onClick={()=>setShowBorrow(false)}>
-              <div className="md" onClick={e=>e.stopPropagation()}>
-                <h3 style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:17,fontWeight:700,marginBottom:3,color:"#ffd740"}}>New Loan</h3>
-                <p style={{fontSize:10,color:"#5a5a6a",marginBottom:16}}>
-                  LTV {(ltv*100).toFixed(0)}% · {rate}% APR · Max {fUSD(maxBorrow)}
-                </p>
-                <div style={{marginBottom:14}}>
-                  <label style={{fontSize:9,color:"#8a8a9a",display:"block",marginBottom:5}}>Duration</label>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:5}}>
-                    {[7,14,30,60,90].map(d=>(
-                      <button key={d} className="bt" onClick={()=>setBorrowDur(d)} style={{
-                        padding:"7px 2px",fontSize:10,textAlign:"center",borderRadius:5,
-                        background:borrowDur===d?"#ffd740":"#1a1a2e",color:borrowDur===d?"#0a0a14":"#8a8a9a",
-                        border:borrowDur===d?"none":"1px solid #2a2a3e"
-                      }}>{d}d</button>
-                    ))}
-                  </div>
-                </div>
-                <div style={{marginBottom:14}}>
-                  <label style={{fontSize:9,color:"#8a8a9a",display:"block",marginBottom:5}}>Amount (USD)</label>
-                  <input type="number" value={borrowAmt} onChange={e=>setBorrowAmt(e.target.value)} placeholder="0.00" style={inp}/>
-                  <div style={{display:"flex",gap:5,marginTop:6}}>
-                    {[0.25,0.5,0.75,1].map(p=>(
-                      <button key={p} className="bt" onClick={()=>setBorrowAmt((maxBorrow*p).toFixed(0))} style={{
-                        flex:1,background:"#1a1a2e",color:"#8a8a9a",padding:"5px",fontSize:9
-                      }}>{(p*100)}%</button>
-                    ))}
-                  </div>
-                </div>
-                {borrowAmt && parseFloat(borrowAmt)>0 && (()=>{
-                  const a=parseFloat(borrowAmt); const coll=a/(price*ltv);
-                  return <div style={{background:"#0e0e20",borderRadius:7,padding:10,marginBottom:14,fontSize:10}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                      <span style={{color:"#5a5a6a"}}>Collateral</span><span>{fBTC(coll)}</span>
-                    </div>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                      <span style={{color:"#5a5a6a"}}>Liq. price</span><span style={{color:"#ff1744"}}>{fUSD(a/coll)}</span>
-                    </div>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                      <span style={{color:"#5a5a6a"}}>Interest ({borrowDur}d)</span><span>{fUSD(a*(rate/100)*(borrowDur/365))}</span>
-                    </div>
-                    <div style={{display:"flex",justifyContent:"space-between"}}>
-                      <span style={{color:"#5a5a6a"}}>Maturity</span><span>Day {day+borrowDur}</span>
-                    </div>
-                  </div>;
-                })()}
-                <div style={{display:"flex",gap:8}}>
-                  <button className="bt" onClick={()=>setShowBorrow(false)} style={{flex:1,background:"#1a1a2e",color:"#8a8a9a",padding:"10px",fontSize:11}}>Cancel</button>
-                  <button className="bt" onClick={handleBorrow} disabled={!borrowAmt||parseFloat(borrowAmt)<=0||parseFloat(borrowAmt)>maxBorrow}
-                    style={{flex:1,padding:"10px",fontSize:11,color:"#0a0a14",
-                      background:borrowAmt&&parseFloat(borrowAmt)>0&&parseFloat(borrowAmt)<=maxBorrow?"#ffd740":"#2a2a3e"
-                    }}>Confirm</button>
-                </div>
-              </div>
-            </div>
-          )}
+function renderTeacherDashboard() {
+  const price = gameData.price || 65000;
+  const day = gameData.day || 0;
+  const hist = gameData.priceHistory || [price];
+  priceHistory = hist;
 
-          {/* TRADE MODAL */}
-          {showTrade && (
-            <div className="mo" onClick={()=>setShowTrade(false)}>
-              <div className="md" onClick={e=>e.stopPropagation()}>
-                <h3 style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:17,fontWeight:700,marginBottom:3,color:"#00e676"}}>Trade BTC</h3>
-                <p style={{fontSize:10,color:"#5a5a6a",marginBottom:16}}>Current price: {fUSD(price)}</p>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:14}}>
-                  <button className="bt" onClick={()=>setTradeSide("buy")} style={{
-                    padding:"10px",fontSize:12,borderRadius:7,
-                    background:tradeSide==="buy"?"#00e676":"#1a1a2e",color:tradeSide==="buy"?"#0a0a14":"#8a8a9a",
-                    border:tradeSide==="buy"?"none":"1px solid #2a2a3e"
-                  }}>BUY BTC</button>
-                  <button className="bt" onClick={()=>setTradeSide("sell")} style={{
-                    padding:"10px",fontSize:12,borderRadius:7,
-                    background:tradeSide==="sell"?"#ff1744":"#1a1a2e",color:tradeSide==="sell"?"#fff":"#8a8a9a",
-                    border:tradeSide==="sell"?"none":"1px solid #2a2a3e"
-                  }}>SELL BTC</button>
-                </div>
-                <div style={{marginBottom:14}}>
-                  <label style={{fontSize:9,color:"#8a8a9a",display:"block",marginBottom:5}}>Amount (BTC)</label>
-                  <input type="number" value={tradeAmt} onChange={e=>setTradeAmt(e.target.value)} placeholder="0.0000" step="0.0001" style={inp}/>
-                  <div style={{display:"flex",gap:5,marginTop:6}}>
-                    {tradeSide==="buy" ? (
-                      [0.25,0.5,0.75,1].map(p=>{
-                        const maxBuy = cash/price;
-                        return <button key={p} className="bt" onClick={()=>setTradeAmt((maxBuy*p).toFixed(4))} style={{
-                          flex:1,background:"#1a1a2e",color:"#8a8a9a",padding:"5px",fontSize:9
-                        }}>{(p*100)}%</button>;
-                      })
-                    ) : (
-                      [0.25,0.5,0.75,1].map(p=>(
-                        <button key={p} className="bt" onClick={()=>setTradeAmt((btc*p).toFixed(4))} style={{
-                          flex:1,background:"#1a1a2e",color:"#8a8a9a",padding:"5px",fontSize:9
-                        }}>{(p*100)}%</button>
-                      ))
-                    )}
-                  </div>
-                </div>
-                {tradeAmt && parseFloat(tradeAmt)>0 && (()=>{
-                  const a=parseFloat(tradeAmt);
-                  const usdVal = a*price;
-                  const canDo = tradeSide==="buy" ? cash>=usdVal : btc>=a;
-                  return <div style={{background:"#0e0e20",borderRadius:7,padding:10,marginBottom:14,fontSize:10}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                      <span style={{color:"#5a5a6a"}}>{tradeSide==="buy"?"Cost":"Proceeds"}</span>
-                      <span style={{color:canDo?"#e0e0e8":"#ff1744"}}>{fUSD(usdVal)}</span>
-                    </div>
-                    <div style={{display:"flex",justifyContent:"space-between"}}>
-                      <span style={{color:"#5a5a6a"}}>{tradeSide==="buy"?"Cash after":"BTC after"}</span>
-                      <span>{tradeSide==="buy"?fUSD(cash-usdVal):fBTC(btc-a)}</span>
-                    </div>
-                    {!canDo && <div style={{color:"#ff1744",fontSize:9,marginTop:4}}>Insufficient {tradeSide==="buy"?"cash":"BTC"}</div>}
-                  </div>;
-                })()}
-                <div style={{display:"flex",gap:8}}>
-                  <button className="bt" onClick={()=>{setShowTrade(false);setTradeAmt("")}} style={{flex:1,background:"#1a1a2e",color:"#8a8a9a",padding:"10px",fontSize:11}}>Cancel</button>
-                  <button className="bt" onClick={handleTrade} disabled={!tradeAmt||parseFloat(tradeAmt)<=0}
-                    style={{flex:1,padding:"10px",fontSize:11,color:tradeSide==="sell"?"#fff":"#0a0a14",
-                      background:tradeAmt&&parseFloat(tradeAmt)>0?(tradeSide==="buy"?"#00e676":"#ff1744"):"#2a2a3e"
-                    }}>{tradeSide==="buy"?"Buy":"Sell"}</button>
-                </div>
-              </div>
-            </div>
-          )}
+  el('t-price').textContent = fUSD(price);
+  el('teacher-day-badge').textContent = `DAY ${day}`;
+  el('ticker-price').textContent = `BTC: ${fUSD(price)}`;
+  el('ticker-day').textContent = `Day: ${day}`;
 
-          {/* LIQUIDATE CONFIRM */}
-          {liqConfirm && (
-            <div className="mo" onClick={()=>setLiqConfirm(null)}>
-              <div className="md" onClick={e=>e.stopPropagation()}>
-                <h3 style={{fontFamily:"'Space Grotesk',sans-serif",fontSize:17,fontWeight:700,marginBottom:6,color:"#ff9100"}}>Insufficient Cash</h3>
-                <p style={{fontSize:11,color:"#8a8a9a",marginBottom:14,lineHeight:1.5}}>Sell BTC to cover the shortfall?</p>
-                <div style={{background:"#0e0e20",borderRadius:7,padding:12,marginBottom:16,fontSize:11}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                    <span style={{color:"#5a5a6a"}}>Total owed</span><span style={{color:"#ff6e40",fontWeight:600}}>{fUSD(liqConfirm.tot)}</span>
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                    <span style={{color:"#5a5a6a"}}>Your cash</span><span>{fUSD(cash)}</span>
-                  </div>
-                  <div style={{height:1,background:"#2a2a3e",margin:"6px 0"}}/>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                    <span style={{color:"#5a5a6a"}}>Shortfall</span><span style={{color:"#ff1744",fontWeight:600}}>{fUSD(liqConfirm.short)}</span>
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between"}}>
-                    <span style={{color:"#5a5a6a"}}>BTC to sell</span><span style={{color:"#ffd740",fontWeight:600}}>{fBTC(liqConfirm.btcNeed)}</span>
-                  </div>
-                </div>
-                <div style={{display:"flex",gap:8}}>
-                  <button className="bt" onClick={()=>setLiqConfirm(null)} style={{flex:1,background:"#1a1a2e",color:"#8a8a9a",padding:"10px",fontSize:11}}>Cancel</button>
-                  <button className="bt" onClick={confirmLiqRepay} style={{flex:1,background:"#ff9100",color:"#0a0a14",padding:"10px",fontSize:11}}>Sell & Repay</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      );
+  const prevPrice = hist.length > 1 ? hist[hist.length-2] : price;
+  const chgPct = ((price - prevPrice)/prevPrice*100).toFixed(2);
+  el('t-price-chg').textContent = `${price >= prevPrice ? '▲' : '▼'} ${chgPct}%`;
+  el('t-price-chg').style.color = price >= prevPrice ? 'var(--green)' : 'var(--red)';
+
+  const defaults = gameData.totalDefaults || 0;
+  const repaid = gameData.totalRepaid || 0;
+  el('t-defaults').innerHTML = `${defaults} <span style="color:var(--muted2);font-size:16px">/ </span><span id="t-repaid" style="color:var(--green)">${repaid}</span>`;
+
+  const allLoans = Object.values(loansData).filter(l => l.status === 'active');
+  el('t-loans').textContent = allLoans.length;
+  const vol = allLoans.reduce((s,l) => s + l.amount, 0);
+  el('t-loan-vol').textContent = `Total volume: ${fUSD(vol)}`;
+  el('ticker-loans').textContent = `Active Loans: ${allLoans.length}`;
+  el('ticker-volume').textContent = `Volume: ${fUSD(vol)}`;
+
+  drawChart('t-chart', hist, 200, 40);
+
+  // Log
+  const log = gameData.log || [];
+  el('teacher-log').innerHTML = [...log].reverse().slice(0,50).map(e =>
+    `<div class="log-entry log-${e.type||'info'}">[Day ${e.day}] ${e.msg}</div>`
+  ).join('');
+}
+
+function renderTeacherPlayers() {
+  const players = Object.entries(playersData);
+  el('ticker-players').textContent = `Players: ${players.length}`;
+  el('teacher-player-list').innerHTML = players.map(([id, p]) => `
+    <div class="player-row" style="margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="dot dot-green"></span>
+        <span style="font-size:13px;font-weight:600">${p.name}</span>
+      </div>
+      <span class="badge ${p.role==='lender'?'badge-lender':p.role==='borrower'?'badge-borrower':'badge-teacher'}">${p.role}</span>
+    </div>
+  `).join('');
+}
+
+function renderTeacherLoans() {
+  const loans = Object.entries(loansData);
+  if (!loans.length) { el('teacher-loans-list').innerHTML = '<p style="color:var(--muted);text-align:center;padding:10px;font-family:var(--mono);font-size:12px">No active loans.</p>'; return; }
+  const day = gameData.day || 0;
+  const price = gameData.price || 65000;
+  el('teacher-loans-list').innerHTML = loans.filter(([,l])=>l.status==='active').map(([id,l]) => {
+    const o = owed(l, day);
+    const health = (l.collateralBtc * price) / o.total;
+    const hColor = health > 1.5 ? 'var(--green)' : health > 1.1 ? 'var(--gold)' : 'var(--red)';
+    return `<div style="display:flex;gap:20px;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">
+      <span style="color:var(--muted2)">Loan #${id.substr(0,6)}</span>
+      <span>${l.borrowerName} → ${l.lenderName}</span>
+      <span>${fUSD(l.amount)}</span>
+      <span style="color:${hColor}">Health: ${health.toFixed(2)}x</span>
+      <span style="color:var(--muted2)">${Math.max((l.originDay+l.duration)-day,0)}d left</span>
+    </div>`;
+  }).join('') || '<p style="color:var(--muted);text-align:center;padding:10px;font-family:var(--mono);font-size:12px">No active loans.</p>';
+}
+
+async function advanceDay() {
+  const snap = await db.ref(`rooms/${roomCode}/game`).once('value');
+  const game = snap.val() || {};
+  const day = (game.day || 0) + 1;
+  const price = simPrice(game.price || 65000);
+  const hist = [...(game.priceHistory || [65000]).slice(-60), price];
+
+  // Process all active loans
+  const loansSnap = await db.ref(`rooms/${roomCode}/loans`).once('value');
+  const loans = loansSnap.val() || {};
+  const walletsSnap = await db.ref(`rooms/${roomCode}/wallets`).once('value');
+  const wallets = walletsSnap.val() || {};
+
+  let updates = {};
+  let newLog = [];
+  let totalDefaults = game.totalDefaults || 0;
+  let totalRepaid = game.totalRepaid || 0;
+
+  for (const [lid, loan] of Object.entries(loans)) {
+    if (loan.status !== 'active') continue;
+    const matDay = loan.originDay + loan.duration;
+    const borrowerWallet = wallets[loan.borrowerId] || {};
+    const lenderWallet = wallets[loan.lenderId] || {};
+    const o = owed(loan, day);
+
+    // Check LTV breach
+    const curLTV = loan.amount / (loan.collateralBtc * price);
+    if (curLTV > (loan.ltvLimit || 0.9)) {
+      // liquidate
+      updates[`rooms/${roomCode}/loans/${lid}/status`] = 'liquidated';
+      updates[`rooms/${roomCode}/wallets/${loan.lenderId}/cash`] = (lenderWallet.cash || 0) + loan.collateralBtc * price;
+      updates[`rooms/${roomCode}/wallets/${loan.lenderId}/totalInterest`] = (lenderWallet.totalInterest||0) + (loan.collateralBtc*price - loan.amount);
+      updates[`rooms/${roomCode}/wallets/${loan.borrowerId}/btc`] = Math.max((borrowerWallet.btc||0), 0);
+      totalDefaults++;
+      newLog.push({ day, msg: `LIQUIDATED: ${loan.borrowerName}'s loan (${fUSD(loan.amount)}) — LTV breached`, type:'down' });
+      continue;
     }
 
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-  </script>
+    // Check maturity
+    if (day >= matDay) {
+      if ((borrowerWallet.cash || 0) >= o.total) {
+        // auto-repay
+        updates[`rooms/${roomCode}/loans/${lid}/status`] = 'repaid';
+        updates[`rooms/${roomCode}/wallets/${loan.borrowerId}/cash`] = (borrowerWallet.cash||0) - o.total;
+        updates[`rooms/${roomCode}/wallets/${loan.borrowerId}/btc`] = (borrowerWallet.btc||0) + loan.collateralBtc;
+        updates[`rooms/${roomCode}/wallets/${loan.lenderId}/cash`] = (lenderWallet.cash||0) + o.total;
+        updates[`rooms/${roomCode}/wallets/${loan.lenderId}/totalInterest`] = (lenderWallet.totalInterest||0) + o.interest;
+        totalRepaid++;
+        newLog.push({ day, msg: `MATURED: ${loan.borrowerName} repaid ${fUSD(o.total)} to ${loan.lenderName}`, type:'up' });
+      } else {
+        // default — seize collateral
+        updates[`rooms/${roomCode}/loans/${lid}/status`] = 'defaulted';
+        updates[`rooms/${roomCode}/wallets/${loan.lenderId}/cash`] = (lenderWallet.cash||0) + loan.collateralBtc * price;
+        totalDefaults++;
+        newLog.push({ day, msg: `DEFAULT: ${loan.borrowerName} couldn't repay ${fUSD(o.total)} — collateral seized`, type:'down' });
+      }
+    }
+  }
+
+  const dir = price >= (game.price||65000) ? '▲' : '▼';
+  const chg = ((price-(game.price||65000))/(game.price||65000)*100).toFixed(2);
+  newLog.unshift({ day, msg: `Day ${day}: BTC ${fUSD(price)} ${dir}${chg}%`, type: price>=(game.price||65000)?'up':'down' });
+
+  const prevLog = game.log || [];
+  updates[`rooms/${roomCode}/game/day`] = day;
+  updates[`rooms/${roomCode}/game/price`] = price;
+  updates[`rooms/${roomCode}/game/priceHistory`] = hist;
+  updates[`rooms/${roomCode}/game/totalDefaults`] = totalDefaults;
+  updates[`rooms/${roomCode}/game/totalRepaid`] = totalRepaid;
+  updates[`rooms/${roomCode}/game/log`] = [...prevLog.slice(-80), ...newLog];
+
+  await db.ref().update(updates);
+}
+
+async function triggerShock(type) {
+  const snap = await db.ref(`rooms/${roomCode}/game/price`).once('value');
+  const price = snap.val() || 65000;
+  const newPrice = type === 'crash' ? price * (0.7 + Math.random()*0.1) : price * (1.2 + Math.random()*0.15);
+  const day = (await db.ref(`rooms/${roomCode}/game/day`).once('value')).val() || 0;
+  const hist = (await db.ref(`rooms/${roomCode}/game/priceHistory`).once('value')).val() || [price];
+  const prevLog = (await db.ref(`rooms/${roomCode}/game/log`).once('value')).val() || [];
+  const msg = type === 'crash' ? `💥 MARKET CRASH! BTC ${fUSD(price)} → ${fUSD(newPrice)}` : `🚀 PRICE PUMP! BTC ${fUSD(price)} → ${fUSD(newPrice)}`;
+  await db.ref(`rooms/${roomCode}/game`).update({
+    price: newPrice,
+    priceHistory: [...hist.slice(-60), newPrice],
+    log: [...prevLog.slice(-80), { day, msg, type: type==='crash'?'down':'up' }]
+  });
+}
+
+// ══════════════════════════════════════════════════════
+// LENDER DASHBOARD
+// ══════════════════════════════════════════════════════
+function initLenderDashboard() {
+  el('lender-name').textContent = myName;
+
+  db.ref(`rooms/${roomCode}/game`).on('value', snap => {
+    gameData = snap.val() || {};
+    updateLenderHeader();
+  });
+  db.ref(`rooms/${roomCode}/wallets/${myId}`).on('value', snap => {
+    const wallet = snap.val() || {};
+    updateLenderWallet(wallet);
+  });
+  db.ref(`rooms/${roomCode}/loans`).on('value', snap => {
+    loansData = snap.val() || {};
+    renderLenderLoans();
+    renderLenderRequests();
+  });
+}
+
+function updateLenderHeader() {
+  const day = gameData.day || 0;
+  const price = gameData.price || 65000;
+  const hist = gameData.priceHistory || [price];
+  el('lender-day-badge').textContent = `DAY ${day}`;
+  el('l-price').textContent = fUSD(price);
+  el('l-ticker-price').textContent = `BTC: ${fUSD(price)}`;
+  el('l-ticker-day').textContent = `Day: ${day}`;
+  el('l-ticker-name').textContent = `You: ${myName} (Lender)`;
+  drawChart('l-chart', hist, 180, 30);
+}
+
+function updateLenderWallet(wallet) {
+  const activeLoanTotal = Object.values(loansData).filter(l=>l.lenderId===myId&&l.status==='active').reduce((s,l)=>s+l.amount,0);
+  el('l-cash').textContent = fUSD(wallet.cash || 0);
+  el('l-cash-locked').textContent = `Locked: ${fUSD(activeLoanTotal)}`;
+  el('l-lent').textContent = fUSD(wallet.totalLent || 0);
+  el('l-interest-earned').textContent = `Interest earned: ${fUSD(wallet.totalInterest || 0)}`;
+}
+
+async function publishOffer() {
+  const rate = parseFloat(el('l-rate').value) || 10;
+  const ltv = parseFloat(el('l-ltv').value) || 50;
+  const maxLoan = parseFloat(el('l-maxloan').value) || 20000;
+  await db.ref(`rooms/${roomCode}/offers/${myId}`).set({
+    lenderId: myId, lenderName: myName,
+    rate, ltv, maxLoan,
+    updatedAt: Date.now(), active: true
+  });
+  el('l-offer-status').textContent = '✓ Offer published';
+  setTimeout(() => el('l-offer-status').textContent = '', 2000);
+}
+
+function renderLenderRequests() {
+  const requests = Object.entries(loansData).filter(([,l]) => l.lenderId===myId && l.status==='pending');
+  el('l-req-count').textContent = requests.length;
+  requests.length ? show('l-req-badge') : hide('l-req-badge');
+
+  if (!requests.length) {
+    el('l-requests-list').innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:20px;font-family:var(--mono)">No requests yet.</p>';
+    return;
+  }
+  const day = gameData.day || 0;
+  const price = gameData.price || 65000;
+  el('l-requests-list').innerHTML = requests.map(([lid, l]) => {
+    const collVal = l.collateralBtc * price;
+    const ltvCur = (l.amount / collVal * 100).toFixed(1);
+    return `<div class="request-card pending">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-weight:700;font-size:13px">${l.borrowerName}</span>
+        <span class="badge badge-borrower">Borrower</span>
+      </div>
+      <div class="grid2" style="font-family:var(--mono);font-size:11px;gap:6px;margin-bottom:10px">
+        <div><span style="color:var(--muted2)">Amount: </span>${fUSD(l.amount)}</div>
+        <div><span style="color:var(--muted2)">Duration: </span>${l.duration}d</div>
+        <div><span style="color:var(--muted2)">Collateral: </span>${fBTC(l.collateralBtc)}</div>
+        <div><span style="color:var(--muted2)">Current LTV: </span>${ltvCur}%</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-green btn-sm" style="flex:1" onclick="respondLoan('${lid}','approve')">Approve</button>
+        <button class="btn btn-red btn-sm" style="flex:1" onclick="respondLoan('${lid}','reject')">Reject</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderLenderLoans() {
+  const myLoans = Object.entries(loansData).filter(([,l]) => l.lenderId===myId && l.status==='active');
+  if (!myLoans.length) {
+    el('l-active-loans').innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:20px;font-family:var(--mono)">No active loans.</p>';
+    return;
+  }
+  const day = gameData.day || 0;
+  const price = gameData.price || 65000;
+  el('l-active-loans').innerHTML = myLoans.map(([lid, l]) => {
+    const o = owed(l, day);
+    const health = (l.collateralBtc * price) / o.total;
+    const hColor = health > 1.5 ? 'var(--green)' : health > 1.1 ? 'var(--gold)' : 'var(--red)';
+    const drem = Math.max((l.originDay+l.duration)-day,0);
+    return `<div class="loan-card ${drem<=3?'urgent':drem<=7?'warning':''}">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="font-weight:700">${l.borrowerName}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:${drem<=3?'var(--red)':'var(--muted2)'}">${drem}d left</span>
+      </div>
+      <div class="grid2" style="font-family:var(--mono);font-size:11px;gap:4px">
+        <div><span style="color:var(--muted2)">Principal: </span>${fUSD(l.amount)}</div>
+        <div><span style="color:var(--muted2)">Owed: </span><span style="color:var(--orange)">${fUSD(o.total)}</span></div>
+        <div><span style="color:var(--muted2)">Collateral: </span>${fBTC(l.collateralBtc)}</div>
+        <div><span style="color:var(--muted2)">Health: </span><span style="color:${hColor}">${health.toFixed(2)}x</span></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function respondLoan(loanId, decision) {
+  const loan = loansData[loanId];
+  if (!loan) return;
+  if (decision === 'approve') {
+    // deduct cash from lender, give cash to borrower
+    const lenderSnap = await db.ref(`rooms/${roomCode}/wallets/${myId}`).once('value');
+    const lw = lenderSnap.val() || {};
+    const borrowerSnap = await db.ref(`rooms/${roomCode}/wallets/${loan.borrowerId}`).once('value');
+    const bw = borrowerSnap.val() || {};
+    if ((lw.cash||0) < loan.amount) {
+      alert('Insufficient funds to approve this loan!'); return;
+    }
+    await db.ref().update({
+      [`rooms/${roomCode}/loans/${loanId}/status`]: 'active',
+      [`rooms/${roomCode}/wallets/${myId}/cash`]: (lw.cash||0) - loan.amount,
+      [`rooms/${roomCode}/wallets/${myId}/totalLent`]: (lw.totalLent||0) + loan.amount,
+      [`rooms/${roomCode}/wallets/${loan.borrowerId}/cash`]: (bw.cash||0) + loan.amount,
+    });
+    addLog(`${myName} approved ${loan.borrowerName}'s loan for ${fUSD(loan.amount)}`, 'up');
+  } else {
+    await db.ref(`rooms/${roomCode}/loans/${loanId}/status`).set('rejected');
+    addLog(`${myName} rejected ${loan.borrowerName}'s loan request`, 'warn');
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// BORROWER DASHBOARD
+// ══════════════════════════════════════════════════════
+function initBorrowerDashboard() {
+  el('borrower-name').textContent = myName;
+
+  db.ref(`rooms/${roomCode}/game`).on('value', snap => {
+    gameData = snap.val() || {};
+    updateBorrowerHeader();
+  });
+  db.ref(`rooms/${roomCode}/wallets/${myId}`).on('value', snap => {
+    const wallet = snap.val() || {};
+    updateBorrowerWallet(wallet);
+  });
+  db.ref(`rooms/${roomCode}/offers`).on('value', snap => {
+    offersData = snap.val() || {};
+    renderBorrowerOffers();
+  });
+  db.ref(`rooms/${roomCode}/loans`).on('value', snap => {
+    loansData = snap.val() || {};
+    renderBorrowerLoans();
+  });
+}
+
+function updateBorrowerHeader() {
+  const day = gameData.day || 0;
+  const price = gameData.price || 65000;
+  const hist = gameData.priceHistory || [price];
+  el('borrower-day-badge').textContent = `DAY ${day}`;
+  el('b-ticker-price').textContent = `BTC: ${fUSD(price)}`;
+  el('b-ticker-day').textContent = `Day: ${day}`;
+  el('b-ticker-name').textContent = `You: ${myName} (Borrower)`;
+  drawChart('b-chart', hist, 180, 30);
+}
+
+async function updateBorrowerWallet(wallet) {
+  const price = gameData.price || 65000;
+  const myLoans = Object.values(loansData).filter(l=>l.borrowerId===myId&&l.status==='active');
+  const totalDebt = myLoans.reduce((s,l)=>s+owed(l,gameData.day||0).total,0);
+  const lockedBtc = myLoans.reduce((s,l)=>s+l.collateralBtc,0);
+  const nw = (wallet.btc||0)*price + (wallet.cash||0) - totalDebt;
+
+  el('b-btc').textContent = fBTC(wallet.btc||0);
+  el('b-btc-usd').textContent = `≈ ${fUSD((wallet.btc||0)*price)}`;
+  el('b-cash').textContent = fUSD(wallet.cash||0);
+  el('b-debt').textContent = `Debt: ${fUSD(totalDebt)}`;
+  el('b-networth').textContent = fUSD(nw);
+}
+
+function renderBorrowerOffers() {
+  const offers = Object.entries(offersData).filter(([,o])=>o.active);
+  el('b-offer-count').textContent = offers.length;
+  if (!offers.length) {
+    el('b-offers-list').innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:20px;font-family:var(--mono)">No offers available yet.<br>Waiting for lenders to post...</p>';
+    return;
+  }
+  // Sort by rate ascending
+  offers.sort(([,a],[,b]) => a.rate - b.rate);
+  el('b-offers-list').innerHTML = offers.map(([lid, o]) => `
+    <div class="offer-card" onclick="openBorrowModal('${lid}')">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-weight:700;font-size:13px">${o.lenderName}</span>
+        <span style="font-family:var(--mono);font-size:18px;font-weight:600;color:var(--green)">${o.rate}% APR</span>
+      </div>
+      <div class="grid2" style="font-family:var(--mono);font-size:11px;gap:4px">
+        <div><span style="color:var(--muted2)">Max LTV: </span>${o.ltv}%</div>
+        <div><span style="color:var(--muted2)">Max Loan: </span>${fUSD(o.maxLoan)}</div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--blue)">Tap to request loan →</div>
+    </div>
+  `).join('');
+}
+
+function renderBorrowerLoans() {
+  const myLoans = Object.entries(loansData).filter(([,l])=>l.borrowerId===myId);
+  el('b-loan-count').textContent = myLoans.filter(([,l])=>l.status==='active').length;
+  if (!myLoans.length) {
+    el('b-loans-list').innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:20px;font-family:var(--mono)">No loans yet.</p>';
+    return;
+  }
+  const day = gameData.day || 0;
+  const price = gameData.price || 65000;
+  el('b-loans-list').innerHTML = myLoans.map(([lid, l]) => {
+    if (l.status === 'pending') {
+      return `<div class="loan-card"><div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:12px;">Request to <b>${l.lenderName}</b></span>
+        <span class="badge" style="background:rgba(245,200,66,0.15);color:var(--gold);border:1px solid rgba(245,200,66,0.3);animation:pulse 1.5s infinite">Pending...</span>
+      </div></div>`;
+    }
+    if (l.status === 'rejected') {
+      return `<div class="loan-card" style="opacity:0.5"><div style="display:flex;justify-content:space-between">
+        <span style="font-size:12px;">Request to <b>${l.lenderName}</b></span>
+        <span class="badge" style="background:rgba(255,59,92,0.1);color:var(--red);">Rejected</span>
+      </div></div>`;
+    }
+    if (l.status !== 'active') return '';
+    const o = owed(l, day);
+    const health = (l.collateralBtc * price) / o.total;
+    const hColor = health > 1.5 ? 'var(--green)' : health > 1.1 ? 'var(--gold)' : 'var(--red)';
+    const drem = Math.max((l.originDay+l.duration)-day, 0);
+    return `<div class="loan-card ${drem<=3?'urgent':drem<=7?'warning':''}">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="font-weight:700">From: ${l.lenderName}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:${drem<=3?'var(--red)':'var(--muted2)'}">${drem}d left</span>
+      </div>
+      <div class="grid2" style="font-family:var(--mono);font-size:11px;gap:4px;margin-bottom:10px">
+        <div><span style="color:var(--muted2)">Principal: </span>${fUSD(l.amount)}</div>
+        <div><span style="color:var(--muted2)">Owed: </span><span style="color:var(--orange)">${fUSD(o.total)}</span></div>
+        <div><span style="color:var(--muted2)">Collateral: </span>${fBTC(l.collateralBtc)}</div>
+        <div><span style="color:var(--muted2)">Health: </span><span style="color:${hColor}">${health.toFixed(2)}x</span></div>
+      </div>
+      <div class="hbar"><div class="hbar-fill" style="width:${Math.min(health/2*100,100)}%;background:${hColor}"></div></div>
+      <button class="btn btn-green btn-sm btn-full" style="margin-top:10px" onclick="openRepayModal('${lid}')">Repay Loan</button>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════
+// BORROW MODAL
+// ══════════════════════════════════════════════════════
+function openBorrowModal(lenderId) {
+  selectedOffer = { id: lenderId, ...offersData[lenderId] };
+  el('bm-lender-info').textContent = `From: ${selectedOffer.lenderName} · ${selectedOffer.rate}% APR · Max LTV ${selectedOffer.ltv}%`;
+  el('bm-amount').value = '';
+  el('bm-preview').style.display = 'none';
+  setBorrowDur(30);
+
+  // Pct buttons
+  const wallet = {}; // will get from DB
+  db.ref(`rooms/${roomCode}/wallets/${myId}`).once('value').then(snap => {
+    const w = snap.val() || {};
+    const price = gameData.price || 65000;
+    const maxBorrow = Math.min(w.btc * price * selectedOffer.ltv/100, selectedOffer.maxLoan);
+    el('bm-pct-btns').innerHTML = [0.25,0.5,0.75,1].map(p =>
+      `<button class="btn btn-surface btn-sm" style="flex:1" onclick="el('bm-amount').value=${(maxBorrow*p).toFixed(0)};updateBorrowPreview()">${p*100}%</button>`
+    ).join('');
+  });
+
+  el('borrow-modal').style.display = 'flex';
+}
+
+function closeBorrowModal() { el('borrow-modal').style.display = 'none'; }
+
+function setBorrowDur(d) {
+  borrowDuration = d;
+  document.querySelectorAll('#bm-dur-btns button').forEach(btn => {
+    const active = parseInt(btn.dataset.dur) === d;
+    btn.className = active ? 'btn btn-gold btn-sm' : 'btn btn-surface btn-sm';
+  });
+  updateBorrowPreview();
+}
+
+function updateBorrowPreview() {
+  if (!selectedOffer) return;
+  const amt = parseFloat(el('bm-amount').value);
+  if (!amt || amt <= 0) { el('bm-preview').style.display = 'none'; return; }
+  const price = gameData.price || 65000;
+  const ltv = selectedOffer.ltv / 100;
+  const coll = amt / (price * ltv);
+  const interest = amt * (selectedOffer.rate/100) * (borrowDuration/365);
+  const liqPrice = amt / coll;
+  el('bm-preview').style.display = '';
+  el('bm-preview').innerHTML = `
+    <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="color:var(--muted2)">Collateral needed</span><span>${fBTC(coll)}</span></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="color:var(--muted2)">Liquidation price</span><span style="color:var(--red)">${fUSD(liqPrice)}</span></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="color:var(--muted2)">Interest (${borrowDuration}d)</span><span>${fUSD(interest)}</span></div>
+    <div style="display:flex;justify-content:space-between"><span style="color:var(--muted2)">Total to repay</span><span style="color:var(--orange)">${fUSD(amt+interest)}</span></div>`;
+}
+
+async function submitBorrowRequest() {
+  const amt = parseFloat(el('bm-amount').value);
+  if (!amt || amt <= 0 || !selectedOffer) return;
+  const price = gameData.price || 65000;
+  const day = gameData.day || 0;
+  const ltv = selectedOffer.ltv / 100;
+  const coll = amt / (price * ltv);
+
+  const snap = await db.ref(`rooms/${roomCode}/wallets/${myId}`).once('value');
+  const wallet = snap.val() || {};
+  if ((wallet.btc||0) < coll) { alert('Not enough BTC for collateral!'); return; }
+  if (amt > selectedOffer.maxLoan) { alert(`Max loan size is ${fUSD(selectedOffer.maxLoan)}`); return; }
+
+  const loanId = uid();
+  await db.ref().update({
+    [`rooms/${roomCode}/loans/${loanId}`]: {
+      borrowerId: myId, borrowerName: myName,
+      lenderId: selectedOffer.id, lenderName: selectedOffer.lenderName,
+      amount: amt, collateralBtc: coll, rate: selectedOffer.rate,
+      ltv, ltvLimit: ltv * 1.1,
+      duration: borrowDuration, originDay: day, status: 'pending',
+      requestedAt: Date.now()
+    },
+    [`rooms/${roomCode}/wallets/${myId}/btc`]: (wallet.btc||0) - coll,
+  });
+  addLog(`${myName} requested ${fUSD(amt)} from ${selectedOffer.lenderName}`, 'gold');
+  closeBorrowModal();
+}
+
+// ══════════════════════════════════════════════════════
+// REPAY MODAL
+// ══════════════════════════════════════════════════════
+function openRepayModal(loanId) {
+  repayLoanId = loanId;
+  const loan = loansData[loanId];
+  if (!loan) return;
+  const day = gameData.day || 0;
+  const o = owed(loan, day);
+  el('rm-info').textContent = `Loan from ${loan.lenderName} · originated Day ${loan.originDay}`;
+  el('rm-details').innerHTML = `
+    <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="color:var(--muted2)">Principal</span><span>${fUSD(loan.amount)}</span></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="color:var(--muted2)">Interest accrued</span><span style="color:var(--orange)">${fUSD(o.interest)}</span></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="color:var(--muted2)">Total due</span><span style="font-weight:700">${fUSD(o.total)}</span></div>
+    <div style="display:flex;justify-content:space-between"><span style="color:var(--muted2)">Collateral returned</span><span style="color:var(--green)">${fBTC(loan.collateralBtc)}</span></div>`;
+  el('repay-modal').style.display = 'flex';
+}
+
+function closeRepayModal() { el('repay-modal').style.display = 'none'; }
+
+async function confirmRepay() {
+  const loan = loansData[repayLoanId];
+  if (!loan) return;
+  const day = gameData.day || 0;
+  const o = owed(loan, day);
+
+  const bSnap = await db.ref(`rooms/${roomCode}/wallets/${myId}`).once('value');
+  const bw = bSnap.val() || {};
+  if ((bw.cash||0) < o.total) { alert(`Not enough cash. Need ${fUSD(o.total)}, have ${fUSD(bw.cash||0)}`); return; }
+
+  const lSnap = await db.ref(`rooms/${roomCode}/wallets/${loan.lenderId}`).once('value');
+  const lw = lSnap.val() || {};
+
+  await db.ref().update({
+    [`rooms/${roomCode}/loans/${repayLoanId}/status`]: 'repaid',
+    [`rooms/${roomCode}/wallets/${myId}/cash`]: (bw.cash||0) - o.total,
+    [`rooms/${roomCode}/wallets/${myId}/btc`]: (bw.btc||0) + loan.collateralBtc,
+    [`rooms/${roomCode}/wallets/${loan.lenderId}/cash`]: (lw.cash||0) + o.total,
+    [`rooms/${roomCode}/wallets/${loan.lenderId}/totalInterest`]: (lw.totalInterest||0) + o.interest,
+  });
+  addLog(`${myName} repaid ${fUSD(o.total)} to ${loan.lenderName}`, 'up');
+  closeRepayModal();
+}
+
+// ══════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════
+function simPrice(p) { return Math.max(p * Math.exp(0.0002 + (Math.random()-0.5)*0.08), 1000); }
+
+async function addLog(msg, type='info') {
+  const day = gameData.day || 0;
+  const logRef = db.ref(`rooms/${roomCode}/game/log`);
+  const snap = await logRef.once('value');
+  const log = snap.val() || [];
+  await logRef.set([...log.slice(-80), { day, msg, type }]);
+}
+
+function drawChart(canvasId, data, w, h) {
+  const canvas = el(canvasId);
+  if (!canvas || data.length < 2) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  const mn = Math.min(...data), mx = Math.max(...data), r = mx-mn||1;
+  const pts = data.map((v,i) => [i/(data.length-1)*w, h-((v-mn)/r)*(h-4)-2]);
+  const last = data[data.length-1], prev = data[data.length-2];
+  const color = last >= prev ? '#00d68f' : '#ff3b5c';
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  pts.forEach(([x,y], i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+  ctx.stroke();
+  // fill
+  const grad = ctx.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0, last>=prev?'rgba(0,214,143,0.15)':'rgba(255,59,92,0.15)');
+  grad.addColorStop(1, 'transparent');
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+}
+
+// make el accessible in inline handlers
+window.el = el;
+</script>
 </body>
 </html>
