@@ -66,8 +66,4 @@ Borrowers can set:
 
 ## Run locally
 
-Because this is a single HTML file, you can run it with any static server.
-
-### Option A: Python
-```bash
-python -m http.server 8000
+Because this is a single HTML file, you can run it with any static server. Simply double click index.html to run.
