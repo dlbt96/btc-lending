@@ -6,7 +6,7 @@ A **real-time, multiplayer DeFi lending classroom game** where students can:
 - **Trade BTC** as the teacher moves the price day-by-day
 - Build “reputation / access” via a **τ-credit** system (repay loans to unlock undercollateralized credit)
 
-The whole app is currently a **single-page web app** in `index.html`. :contentReference[oaicite:1]{index=1}
+The whole app is currently a **single-page web app** in `index.html`.
 
 ---
 
