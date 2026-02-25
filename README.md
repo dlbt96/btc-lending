@@ -1,0 +1,73 @@
+# ₿ Collateral Protocol (btc-lending)
+
+A **real-time, multiplayer DeFi lending classroom game** where students can:
+- **Lend** USD against BTC collateral
+- **Borrow** USD to lever into BTC
+- **Trade BTC** as the teacher moves the price day-by-day
+- Build “reputation / access” via a **τ-credit** system (repay loans to unlock undercollateralized credit)
+
+The whole app is currently a **single-page web app** in `index.html`. :contentReference[oaicite:1]{index=1}
+
+---
+
+## Gameplay overview
+
+### Roles
+- **Teacher (Host):** creates a room, sets initial parameters, advances time (“Day”), and can move BTC price.
+- **Students:** join the room, then lend/borrow/trade and manage risk.
+
+### Core mechanics
+- **Lend:** publish a lending offer; other players request loans; you approve/reject. :contentReference[oaicite:2]{index=2}  
+- **Borrow:** borrow cash → buy BTC → post collateral → borrow more (leveraged loop). :contentReference[oaicite:3]{index=3}  
+- **BTC Trade:** buy/sell BTC at the current teacher-controlled price. :contentReference[oaicite:4]{index=4}  
+- **τ-credit:** after **τ repaid loans**, players unlock “undercollateral” credit (UI describes “100% LTV, no liquidation”). :contentReference[oaicite:5]{index=5}  
+- **Risk:** leverage amplifies losses and can cascade into defaults. :contentReference[oaicite:6]{index=6}
+
+---
+
+## Room settings (Teacher)
+
+In the lobby, the teacher can set:
+- Starting Cash (USD)
+- Starting BTC
+- BTC Start Price
+- **τ threshold**
+- Auto-clock speed (sec/day, 0 = off) :contentReference[oaicite:7]{index=7}
+
+During the game, the teacher dashboard supports:
+- Next Day / Auto
+- Quick price moves (±10%, ±25%)
+- Stats: active loans, defaults vs repaid, BTC traded, event log :contentReference[oaicite:8]{index=8}
+
+---
+
+## Player actions
+
+### Publish a lending offer
+Players can set:
+- Interest Rate (% APR)
+- Max LTV (%)
+- Max Loan Size (USD)
+- Minimum τ-credit required :contentReference[oaicite:9]{index=9}
+
+### Post a borrow request
+Borrowers can set:
+- Amount (USD)
+- Max rate (% APR)
+- Duration (7/14/30/60/90 days) :contentReference[oaicite:10]{index=10}
+
+### Loan lifecycle
+- Borrower sends request
+- Lender fulfills (chooses rate + LTV)
+- Borrower repays (or defaults)
+- Stats update in dashboard & player panel :contentReference[oaicite:11]{index=11}
+
+---
+
+## Run locally
+
+Because this is a single HTML file, you can run it with any static server.
+
+### Option A: Python
+```bash
+python -m http.server 8000
